@@ -5,15 +5,15 @@ use verus_builtin_macros::verus;
 use vstd::prelude::*;
 
 #[cfg(verus_keep_ghost)]
-use super::super::identifiers;
+use super::super::same_text;
 #[cfg(not(verus_keep_ghost))]
-use chrono_identifiers as identifiers;
+use crate::verified_recipe::same_text;
 
 verus! {
 pub fn matching_predecessor(preview: bool, source: &str, base: &str) -> (matches: bool)
     ensures matches == (preview && source@ == base@),
 {
-    preview && identifiers::equal_text(source, base)
+    preview && same_text(source, base)
 }
 }
 
@@ -319,7 +319,7 @@ mod native {
             || answer.status != "passed"
             || request["request_id"] != answer.request_id
             || context["base"] != answer.evidence.base
-            || !chrono_identifiers::valid_oid(answer.evidence.base.as_bytes())
+            || !crate::verified_recipe::delivery::valid_release_oid(answer.evidence.base.as_bytes())
             || answer.evidence.candidate != candidate
             || chrono_harness::wire::digest(&answer.evidence.global_selected)?
                 != detection["selection_sha256"]

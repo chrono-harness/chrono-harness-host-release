@@ -15,14 +15,14 @@ pub fn direct_compiler_binding(
 
 }
 #[cfg(not(verus_keep_ghost))]
+use crate::verified_recipe::delivery::valid_digest as digest;
+#[cfg(not(verus_keep_ghost))]
 use crate::{
     recipe::{Loaded, Scope, Unit},
     verified_recipe::{self as policy, DependencyResult},
 };
 #[cfg(not(verus_keep_ghost))]
 use chrono_harness::{file_identity, no_symlink_parents};
-#[cfg(not(verus_keep_ghost))]
-use chrono_identifiers::valid_digest_text as digest;
 #[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
 #[cfg(not(verus_keep_ghost))]

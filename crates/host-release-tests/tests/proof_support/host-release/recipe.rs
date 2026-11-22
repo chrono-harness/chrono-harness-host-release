@@ -1,5 +1,5 @@
 #[cfg(verus_keep_ghost)]
-use super::policy::identifiers;
+use super::policy::same_text;
 
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
@@ -17,11 +17,11 @@ fn expected_test_threads(owner: &str) -> (out: Option<&'static str>)
             out is Some && out.unwrap()@ == "--test-threads=2"@
         } else { out is None },
 {
-    if identifiers::equal_text(owner, "worktree-tests") {
+    if same_text(owner, "worktree-tests") {
         Some("--test-threads=8")
-    } else if identifiers::equal_text(owner, "judge-workflow-tests")
-        || identifiers::equal_text(owner, "pr-tests")
-        || identifiers::equal_text(owner, "cache-tests") {
+    } else if same_text(owner, "judge-workflow-tests")
+        || same_text(owner, "pr-tests")
+        || same_text(owner, "cache-tests") {
         Some("--test-threads=2")
     } else { None }
 }
@@ -34,7 +34,7 @@ fn expect_thread_argument(actual: Option<&str>, expected: Option<&str>)
     },
 {
     match (actual, expected) {
-        (Some(a), Some(e)) => { if !identifiers::equal_text(a, e) { panic!(); } },
+        (Some(a), Some(e)) => { if !same_text(a, e) { panic!(); } },
         (None, None) => (),
         _ => panic!(),
     }

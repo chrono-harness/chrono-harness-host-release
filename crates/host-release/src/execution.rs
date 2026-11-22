@@ -386,8 +386,8 @@ impl<'a> Execution<'a> {
             .map_err(error)?
             .trim()
             .to_owned();
-        if !chrono_identifiers::valid_oid(source.as_bytes())
-            || !chrono_identifiers::valid_oid(tree.as_bytes())
+        if !crate::verified_recipe::delivery::valid_release_oid(source.as_bytes())
+            || !crate::verified_recipe::delivery::valid_release_oid(tree.as_bytes())
         {
             return Err(error("invalid source identity"));
         }

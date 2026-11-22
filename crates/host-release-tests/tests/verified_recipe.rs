@@ -140,7 +140,7 @@ fn promotion_requires_the_original_run_event_and_complete_workflow_head() {
         }
         assert(head_bytes@[0] == 97);
         assert(exists|i: int| 0 <= i < head_bytes@.len() && head_bytes@[i] != 48);
-        assert(policy::identifiers::oid(head_bytes@));
+        assert(delivery::release_oid(head_bytes@));
         assert(delivery::text_pair((Some("workflow_run"), "workflow_run")));
         assert(delivery::text_pair((Some("workflow_dispatch"), "workflow_dispatch")));
     }
@@ -155,7 +155,7 @@ fn promotion_requires_the_original_run_event_and_complete_workflow_head() {
         assert forall|i: int| 0 <= i < numbers.len() implies numbers@[i].0 == Some(numbers@[i].1) by {}
         assert forall|i: int| 0 <= i < no_numbers.len() implies no_numbers@[i].0 == Some(no_numbers@[i].1) by {}
         assert forall|i: int| 0 <= i < no_texts.len() implies delivery::text_pair(no_texts@[i]) by {}
-        assert(match raw_head { Some(value) => policy::identifiers::oid(value@), None => false });
+        assert(match raw_head { Some(value) => delivery::release_oid(value@), None => false });
     }
     let wrong = delivery::promotion_run(&[], &[], Some("push"), Some(head_bytes));
     let missing = delivery::promotion_run(&[], &[], None, Some(head_bytes));

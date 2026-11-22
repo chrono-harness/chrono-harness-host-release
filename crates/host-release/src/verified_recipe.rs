@@ -5,11 +5,6 @@ use verus_builtin_macros::verus;
 use vstd::prelude::*;
 
 #[cfg(verus_keep_ghost)]
-pub(crate) extern crate chrono_identifiers as identifiers;
-#[cfg(not(verus_keep_ghost))]
-use chrono_identifiers as identifiers;
-
-#[cfg(verus_keep_ghost)]
 #[path = "main.rs"]
 pub mod command;
 #[cfg(verus_keep_ghost)]
@@ -41,6 +36,12 @@ pub mod publication;
 pub mod delivery;
 
 verus! {
+
+pub fn same_text(actual: &str, expected: &str) -> (same: bool)
+    ensures same == (actual@ == expected@),
+{
+    actual.to_owned() == expected.to_owned()
+}
 
 /// 调用者显式提供角色与选择；不根据项目语言、命令或资产数推断 SDK。
 pub enum Invocation {
@@ -96,11 +97,11 @@ pub fn frontend_header(
         && commit@ == expected_commit@ && tree@ == expected_tree@
         && system@ == expected_system@ && machine@ == expected_machine@),
 {
-    identifiers::equal_text(schema, "chrono-release-frontend/v1") && github
-        && identifiers::equal_text(commit, expected_commit)
-        && identifiers::equal_text(tree, expected_tree)
-        && identifiers::equal_text(system, expected_system)
-        && identifiers::equal_text(machine, expected_machine)
+    same_text(schema, "chrono-release-frontend/v1") && github
+        && same_text(commit, expected_commit)
+        && same_text(tree, expected_tree)
+        && same_text(system, expected_system)
+        && same_text(machine, expected_machine)
 }
 
 pub fn frontend_installation(
@@ -112,9 +113,9 @@ pub fn frontend_installation(
         && installed@ == destination@ && hash@ == expected_hash@),
 {
     planned == 1 && reported == 1
-        && identifiers::equal_text(destination, ".chrono-harness/bin/chrono-host-release")
-        && identifiers::equal_text(installed, destination)
-        && identifiers::equal_text(hash, expected_hash)
+        && same_text(destination, ".chrono-harness/bin/chrono-host-release")
+        && same_text(installed, destination)
+        && same_text(hash, expected_hash)
 }
 
 pub fn executable_file(regular: bool, mode: u32) -> (valid: bool)
@@ -126,7 +127,7 @@ pub fn executable_file(regular: bool, mode: u32) -> (valid: bool)
 pub fn same_content(hash: &str, size: u64, expected_hash: &str, expected_size: u64) -> (same: bool)
     ensures same == (hash@ == expected_hash@ && size == expected_size),
 {
-    identifiers::equal_text(hash, expected_hash) && size == expected_size
+    same_text(hash, expected_hash) && size == expected_size
 }
 
 pub fn same_executable(
@@ -147,8 +148,23 @@ pub fn executable_entry(
         && name@ == seq![101u8,120,101,99,117,116,97,98,108,101]
         && size == expected_size && mode == expected_mode),
 {
-    regular && identifiers::equal_bytes(name, &[101u8,120,101,99,117,116,97,98,108,101])
-        && size == expected_size && mode == expected_mode
+    let filename = [101u8,120,101,99,117,116,97,98,108,101];
+    assert(filename@ =~= seq![101u8,120,101,99,117,116,97,98,108,101]);
+    if !regular || size != expected_size || mode != expected_mode || name.len() != filename.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < name.len()
+        invariant i <= name.len(), name.len() == filename.len(),
+            filename@ == seq![101u8,120,101,99,117,116,97,98,108,101],
+            forall|j: int| 0 <= j < i ==> name[j] == filename[j],
+        decreases name.len() - i,
+    {
+        if name[i] != filename[i] { return false; }
+        i += 1;
+    }
+    assert(name@ =~= filename@);
+    true
 }
 
 /// 先核当前 needs 的结果，再接受同一 run 的原生产 attempt。
@@ -166,7 +182,7 @@ pub fn selected_producer(
         && 0 < selected_attempt <= current_attempt && artifact_id@.len() > 0),
 {
     matches!(current, DependencyResult::Success)
-        && identifiers::equal_text(selected_run, current_run)
+        && same_text(selected_run, current_run)
         && !selected_run.is_empty()
         && selected_attempt > 0 && selected_attempt <= current_attempt
         && !artifact_id.is_empty()
@@ -187,8 +203,8 @@ pub fn producer_lineage(
         && producing_run@.len() > 0
         && 0 < producing_attempt && producing_attempt == selected_attempt),
 {
-    identifiers::equal_text(producing_job, expected_job) && !producing_job.is_empty()
-        && identifiers::equal_text(producing_run, selected_run)
+    same_text(producing_job, expected_job) && !producing_job.is_empty()
+        && same_text(producing_run, selected_run)
         && !producing_run.is_empty()
         && producing_attempt > 0 && producing_attempt == selected_attempt
 }
