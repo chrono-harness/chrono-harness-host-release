@@ -32,3 +32,4 @@ prove libchrono_identifiers "$(dirname "$identifiers_manifest")/src/lib.rs"
 proof_bindings=(--extern "chrono_identifiers=$scratch/libchrono_identifiers.rlib"
                 --import "chrono_identifiers=$scratch/chrono_identifiers.vir")
 prove verify.release-recipe crates/host-release/src/verified_recipe.rs
+prove verify.release-recipe-tests crates/host-release-tests/tests/verified_recipe.rs
