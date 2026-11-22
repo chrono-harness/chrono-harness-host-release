@@ -1,8 +1,8 @@
 //! 发布工具自己的生产与消费证据；复用 bootstrap 原报告及现有单执行物运输。
 #[cfg(verus_keep_ghost)]
-use super::identifiers;
+use super::same_text;
 #[cfg(not(verus_keep_ghost))]
-use chrono_identifiers as identifiers;
+use crate::verified_recipe::same_text;
 #[cfg(not(verus_keep_ghost))]
 use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
@@ -12,8 +12,8 @@ verus! {
 pub fn artifact_paths(executable: &str, expected_executable: &str, report: &str, expected_report: &str, archive: &str) -> (valid: bool)
     ensures valid == (executable@ == expected_executable@ && report@ == expected_report@ && archive@ == "executable.tar"@),
 {
-    identifiers::equal_text(executable, expected_executable) && identifiers::equal_text(report, expected_report)
-        && identifiers::equal_text(archive, "executable.tar")
+    same_text(executable, expected_executable) && same_text(report, expected_report)
+        && same_text(archive, "executable.tar")
 }
 }
 #[cfg(not(verus_keep_ghost))]
@@ -291,7 +291,7 @@ pub(crate) fn validate_producer_metadata(
         source.tree.as_deref().unwrap_or(""),
         &native.system,
         &native.machine,
-    ) || !chrono_identifiers::equal_text(&selected.job, &declared.job)
+    ) || selected.job != declared.job
         || !policy::producer_lineage(
             &lineage.job,
             &declared.job,

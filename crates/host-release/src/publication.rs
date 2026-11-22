@@ -365,7 +365,7 @@ fn verify_tag(
     for _ in 0..4 {
         let oid = object["sha"]
             .as_str()
-            .filter(|s| chrono_identifiers::valid_oid(s.as_bytes()))
+            .filter(|s| crate::verified_recipe::delivery::valid_release_oid(s.as_bytes()))
             .ok_or_else(|| error("invalid tag object identity"))?;
         match object["type"].as_str() {
             Some("commit") if oid == identity.source_commit => return Ok(()),
@@ -472,7 +472,7 @@ pub fn publish(
     }
     for (name, asset) in assets {
         if !self::name(name)
-            || !chrono_identifiers::valid_digest_text(&asset.sha256)
+            || !crate::verified_recipe::delivery::valid_digest(&asset.sha256)
             || asset.size == 0
         {
             return Err(error("invalid explicit asset identity"));

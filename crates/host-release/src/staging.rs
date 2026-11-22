@@ -1,8 +1,8 @@
 //! 在登记消费路径暂存已验资产；观察记录真实身份与失败，不代填成功。
 #[cfg(verus_keep_ghost)]
-use super::identifiers;
+use super::same_text;
 #[cfg(not(verus_keep_ghost))]
-use chrono_identifiers as identifiers;
+use crate::verified_recipe::same_text;
 #[cfg(not(verus_keep_ghost))]
 use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
@@ -12,7 +12,7 @@ verus! {
 pub fn copied_member(digest: &str, expected: &str, size: u64, expected_size: u64) -> (valid: bool)
     ensures valid == (digest@ == expected@ && size == expected_size),
 {
-    size == expected_size && identifiers::equal_text(digest, expected)
+    size == expected_size && same_text(digest, expected)
 }
 }
 #[cfg(not(verus_keep_ghost))]

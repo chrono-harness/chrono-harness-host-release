@@ -1,5 +1,5 @@
 //! 发布入口的实际字段判断。适配器只供应外部解码的原值，不供应预先算好的通过标志。
-use super::identifiers;
+use super::same_text;
 #[cfg(not(verus_keep_ghost))]
 use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
@@ -25,7 +25,7 @@ pub fn text_fields(fields: &[(Option<&str>, &str)]) -> (valid: bool)
     {
         match fields[i].0 {
             Some(actual) => {
-                if !identifiers::equal_text(actual, fields[i].1) { return false; }
+                if !same_text(actual, fields[i].1) { return false; }
             },
             None => { return false; },
         }
@@ -86,17 +86,59 @@ pub open spec fn positive_spec(value: Option<u64>) -> bool {
     value is Some && value.unwrap() > 0
 }
 
+pub open spec fn lower_hex(bytes: Seq<u8>) -> bool {
+    forall|i: int| 0 <= i < bytes.len() ==>
+        48 <= #[trigger] bytes[i] <= 57 || 97 <= bytes[i] <= 102
+}
+
+pub open spec fn release_oid(bytes: Seq<u8>) -> bool {
+    (bytes.len() == 40 || bytes.len() == 64) && lower_hex(bytes)
+        && (exists|i: int| 0 <= i < bytes.len() && bytes[i] != 48)
+}
+
+/// Git 的空对象名由全零表示；发布摘要允许全零。
+fn hex_content(bytes: &[u8]) -> (nonzero: Option<bool>)
+    ensures
+        nonzero.is_some() == lower_hex(bytes@),
+        nonzero.is_some() ==> nonzero.unwrap() == (exists|i: int| 0 <= i < bytes.len() && bytes[i] != 48),
+{
+    let mut seen_nonzero = false;
+    for i in 0..bytes.len()
+        invariant
+            seen_nonzero == (exists|j: int| 0 <= j < i && bytes[j] != 48),
+            forall|j: int| 0 <= j < i ==> 48 <= #[trigger] bytes[j] <= 57 || 97 <= bytes[j] <= 102,
+    {
+        let byte = bytes[i];
+        if !(48 <= byte && byte <= 57 || 97 <= byte && byte <= 102) { return None; }
+        if byte != 48 { seen_nonzero = true; }
+    }
+    Some(seen_nonzero)
+}
+
+pub fn valid_release_oid(bytes: &[u8]) -> (valid: bool)
+    ensures valid == release_oid(bytes@),
+{
+    (bytes.len() == 40 || bytes.len() == 64) && matches!(hex_content(bytes), Some(true))
+}
+
+pub fn valid_digest(text: &str) -> (valid: bool)
+    ensures valid == (text.spec_bytes().len() == 64 && lower_hex(text.spec_bytes())),
+{
+    let bytes = text.as_bytes();
+    bytes.len() == 64 && hex_content(bytes).is_some()
+}
+
 /// 只接受显式原运行支持的两个触发事件与完整工作流 head。
 pub fn promotion_run(numbers: &[(Option<u64>, u64)], texts: &[(Option<&str>, &str)], event: Option<&str>, head: Option<&[u8]>) -> (valid: bool)
     ensures valid == (
         (forall|i: int| 0 <= i < numbers.len() ==> numbers@[i].0 == Some(numbers@[i].1))
         && (forall|i: int| 0 <= i < texts.len() ==> text_pair(texts@[i]))
         && (text_pair((event,"workflow_run")) || text_pair((event,"workflow_dispatch")))
-        && (match head { Some(value) => identifiers::oid(value@), None => false })),
+        && (match head { Some(value) => release_oid(value@), None => false })),
 {
     number_fields(numbers) && text_fields(texts)
         && (text_fields(&[(event,"workflow_run")]) || text_fields(&[(event,"workflow_dispatch")]))
-        && match head { Some(value) => identifiers::valid_oid(value), None => false }
+        && match head { Some(value) => valid_release_oid(value), None => false }
 }
 
 /// 保留原生产时间窗；正式晋升不会重新计算或刷新原平台起点。
@@ -177,9 +219,9 @@ pub fn channel(text: &str) -> (out: u8)
         else if text@ == "stable"@ { 2u8 }
         else { 3u8 },
 {
-    if identifiers::equal_text(text, "") || identifiers::equal_text(text, "build") { 0 }
-    else if identifiers::equal_text(text, "preview") { 1 }
-    else if identifiers::equal_text(text, "stable") { 2 }
+    if same_text(text, "") || same_text(text, "build") { 0 }
+    else if same_text(text, "preview") { 1 }
+    else if same_text(text, "stable") { 2 }
     else { 3 }
 }
 
@@ -190,7 +232,7 @@ pub fn requested_version(channel: u8, requested: &str, core: &str, planned: &str
 {
     if channel == 1 { requested.is_empty() }
     else if channel == 2 {
-        identifiers::equal_text(core, planned) && identifiers::equal_text(requested, planned)
+        same_text(core, planned) && same_text(requested, planned)
     } else { false }
 }
 
@@ -199,26 +241,32 @@ pub open spec fn name_byte(byte: u8) -> bool {
         || byte == 46 || byte == 95 || byte == 45
 }
 
-pub fn name(bytes: &[u8]) -> (valid: bool)
-    ensures valid == (bytes.len() > 0 && bytes@ != seq![46u8] && bytes@ != seq![46u8,46]
+pub fn job_id(bytes: &[u8]) -> (valid: bool)
+    ensures valid == (bytes.len() > 0
         && forall|i: int| 0 <= i < bytes.len() ==> name_byte(#[trigger] bytes[i])),
 {
-    let dot = [46u8];
-    let parent = [46u8,46];
-    proof { assert(dot@ =~= seq![46u8]); assert(parent@ =~= seq![46u8,46]); }
-    if bytes.len() == 0 || identifiers::equal_bytes(bytes, &dot)
-        || identifiers::equal_bytes(bytes, &parent) { return false; }
-    let mut i = 0;
-    while i < bytes.len()
-        invariant i <= bytes.len(), bytes.len() > 0,
-            bytes@ != seq![46u8], bytes@ != seq![46u8,46],
-            forall|j: int| 0 <= j < i ==> name_byte(#[trigger] bytes[j]),
-        decreases bytes.len() - i,
+    if bytes.is_empty() { return false; }
+    for i in 0..bytes.len()
+        invariant forall|j: int| 0 <= j < i ==> name_byte(#[trigger] bytes[j]),
     {
         let b = bytes[i];
         if !((65 <= b && b <= 90) || (97 <= b && b <= 122) || (48 <= b && b <= 57)
             || b == 46 || b == 95 || b == 45) { return false; }
-        i += 1;
+    }
+    true
+}
+
+pub fn name(bytes: &[u8]) -> (valid: bool)
+    ensures valid == (bytes.len() > 0 && bytes@ != seq![46u8] && bytes@ != seq![46u8,46]
+        && forall|i: int| 0 <= i < bytes.len() ==> name_byte(#[trigger] bytes[i])),
+{
+    if !job_id(bytes) { return false; }
+    if bytes[0] == 46 && (bytes.len() == 1 || (bytes.len() == 2 && bytes[1] == 46)) {
+        proof {
+            if bytes.len() == 1 { assert(bytes@ =~= seq![46u8]); }
+            else { assert(bytes@ =~= seq![46u8,46]); }
+        }
+        return false;
     }
     true
 }

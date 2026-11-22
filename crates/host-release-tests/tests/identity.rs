@@ -381,3 +381,35 @@ fn git_failure_timeout_and_incomplete_blob_observations_cannot_pass() {
         assert_eq!(commands.calls, vec![expected_blob_query(WORKFLOW_COMMIT)]);
     }
 }
+
+#[test]
+fn release_identifiers_and_digests_keep_their_distinct_wire_formats() {
+    use chrono_host_release::verified_recipe::{delivery, same_text};
+
+    for width in [39, 40, 41, 63, 64, 65] {
+        let nonzero = format!("{}a", "0".repeat(width - 1));
+        let zero = "0".repeat(width);
+        assert_eq!(
+            delivery::valid_release_oid(nonzero.as_bytes()),
+            width == 40 || width == 64
+        );
+        assert!(!delivery::valid_release_oid(zero.as_bytes()));
+        assert_eq!(delivery::valid_digest(&zero), width == 64);
+        assert_eq!(delivery::valid_digest(&nonzero), width == 64);
+    }
+    for bad in ["A", "g", ":", "\0"] {
+        let value = format!("{}{bad}", "0".repeat(63));
+        assert!(!delivery::valid_release_oid(value.as_bytes()));
+        assert!(!delivery::valid_digest(&value));
+    }
+    for job in ["a.B_1-2", ".", ".."] {
+        assert!(delivery::job_id(job.as_bytes()));
+    }
+    for bad in ["", "/", "é", "a b"] {
+        assert!(!delivery::job_id(bad.as_bytes()));
+    }
+    assert!(!delivery::name(b"."));
+    assert!(!delivery::name(b".."));
+    assert!(same_text("原始回执\0", "原始回执\0"));
+    assert!(!same_text("é", "e\u{301}"));
+}

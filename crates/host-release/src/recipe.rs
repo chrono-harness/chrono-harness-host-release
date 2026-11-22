@@ -374,7 +374,7 @@ impl Loaded {
         let mut tests = BTreeMap::new();
         let mut handoffs = Vec::<String>::new();
         for unit in &recipe.units {
-            if !chrono_identifiers::valid_id(unit.id().as_bytes())
+            if !policy::delivery::job_id(unit.id().as_bytes())
                 || unit.id().contains('.')
                 || !ids.insert(unit.id().to_owned())
             {
@@ -445,7 +445,7 @@ impl Loaded {
             }
         }
         let collector = &recipe.collector;
-        if !chrono_identifiers::valid_id(collector.id.as_bytes())
+        if !policy::delivery::job_id(collector.id.as_bytes())
             || collector.id.contains('.')
             || ids.contains(&collector.id)
             || !same_members(
@@ -496,7 +496,7 @@ impl Loaded {
             .collect();
         let mut frontend_jobs = BTreeSet::new();
         for frontend in recipe.native_frontends.values() {
-            if !chrono_identifiers::valid_id(frontend.job.as_bytes())
+            if !policy::delivery::job_id(frontend.job.as_bytes())
                 || business_jobs.contains(&frontend.job)
                 || !frontend_jobs.insert(&frontend.job)
                 || frontend.cost.trim().is_empty()

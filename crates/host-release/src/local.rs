@@ -395,7 +395,7 @@ pub fn run(root: &Path, output: &Path, environment: Environment) -> Result<i32, 
         .map_err(error)?
         .trim()
         .to_owned();
-    if !chrono_identifiers::valid_oid(source.as_bytes())
+    if !crate::verified_recipe::delivery::valid_release_oid(source.as_bytes())
         || !observe(&["status", "--porcelain", "--untracked-files=normal"])?.is_empty()
     {
         return Err(error("local release requires a fixed clean candidate"));

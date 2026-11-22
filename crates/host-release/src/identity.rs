@@ -63,8 +63,8 @@ pub fn verify_workflow(
     let workflow_commit = text(environment, "GITHUB_WORKFLOW_SHA")?;
     let workflow_ref = text(environment, "GITHUB_WORKFLOW_REF")?;
     if repository.is_empty()
-        || !chrono_identifiers::valid_oid(workflow_commit.as_bytes())
-        || !chrono_identifiers::valid_oid(source_commit.as_bytes())
+        || !crate::verified_recipe::delivery::valid_release_oid(workflow_commit.as_bytes())
+        || !crate::verified_recipe::delivery::valid_release_oid(source_commit.as_bytes())
         || !workflow_ref
             .strip_prefix(&format!("{repository}/{path}@"))
             .is_some_and(|reference| !reference.is_empty())
@@ -84,8 +84,8 @@ pub(crate) fn verify_workflow_commits(
     chrono_harness::relative_path(path).map_err(error)?;
     if !path.starts_with(".github/workflows/")
         || !path.ends_with(".yml")
-        || !chrono_identifiers::valid_oid(workflow_commit.as_bytes())
-        || !chrono_identifiers::valid_oid(source_commit.as_bytes())
+        || !crate::verified_recipe::delivery::valid_release_oid(workflow_commit.as_bytes())
+        || !crate::verified_recipe::delivery::valid_release_oid(source_commit.as_bytes())
     {
         return Err(error("invalid fixed workflow identity"));
     }
@@ -111,7 +111,7 @@ pub(crate) fn verify_workflow_commits(
         let value = reply
             .stdout
             .strip_suffix(b"\n")
-            .filter(|oid| chrono_identifiers::valid_oid(oid))
+            .filter(|oid| crate::verified_recipe::delivery::valid_release_oid(oid))
             .ok_or_else(|| error("incomplete workflow blob identity"))?;
         String::from_utf8(value.to_vec()).map_err(error)
     };
@@ -159,8 +159,8 @@ pub fn resolve(
     source_tree: &str,
     environment: &Environment,
 ) -> Result<Identity, String> {
-    if !chrono_identifiers::valid_oid(source_commit.as_bytes())
-        || !chrono_identifiers::valid_oid(source_tree.as_bytes())
+    if !crate::verified_recipe::delivery::valid_release_oid(source_commit.as_bytes())
+        || !crate::verified_recipe::delivery::valid_release_oid(source_tree.as_bytes())
     {
         return Err(error(
             "source observation must contain complete lowercase commit/tree OIDs",

@@ -19,7 +19,7 @@ impl ExecutableIdentity {
     pub fn from_receipt(value: &Value) -> Result<Self, String> {
         let sha256 = value["sha256"]
             .as_str()
-            .filter(|s| chrono_identifiers::valid_digest_text(s))
+            .filter(|s| crate::verified_recipe::delivery::valid_digest(s))
             .ok_or_else(|| error("invalid executable digest"))?
             .to_owned();
         let size = value["size"]

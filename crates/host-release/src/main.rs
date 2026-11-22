@@ -1,7 +1,7 @@
 #[cfg(verus_keep_ghost)]
-use super::identifiers;
+use super::same_text;
 #[cfg(not(verus_keep_ghost))]
-use chrono_identifiers as identifiers;
+use chrono_host_release::verified_recipe::same_text;
 #[cfg(not(verus_keep_ghost))]
 use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
@@ -11,7 +11,7 @@ verus! {
 pub fn select_preview_command(flag: &str) -> (selected: bool)
     ensures selected == (flag@ == "--select-preview"@),
 {
-    identifiers::equal_text(flag, "--select-preview")
+    same_text(flag, "--select-preview")
 }
 }
 #[cfg(not(verus_keep_ghost))]
