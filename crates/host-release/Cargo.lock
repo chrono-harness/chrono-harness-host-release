@@ -96,7 +96,6 @@ version = "0.1.0"
 dependencies = [
  "chrono-harness",
  "chrono-host-bootstrap",
- "chrono-judge-registration",
  "serde",
  "serde_json",
  "serde_yaml_ng",

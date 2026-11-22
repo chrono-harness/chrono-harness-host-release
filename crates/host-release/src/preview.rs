@@ -22,6 +22,7 @@ pub use native::{Recovery, select_landing, write_plan};
 
 #[cfg(not(verus_keep_ghost))]
 mod native {
+    use crate::registrations::Method;
     use crate::{
         execution::Environment,
         identity::{Channel, Identity},
@@ -29,7 +30,6 @@ mod native {
         recipe::{self, Loaded, Unit},
     };
     use chrono_host_bootstrap::source::Committed;
-    use chrono_judge_registration::execution::test_bindings;
     use serde::{Deserialize, Serialize};
     use serde_json::Value;
     use std::{
@@ -370,15 +370,12 @@ mod native {
                     }
                 }
             }
-            let mut test_targets = BTreeMap::<String, BTreeSet<String>>::new();
-            for (target, bindings) in test_bindings(&projects)? {
-                for binding in bindings {
-                    test_targets
-                        .entry(binding.owner)
-                        .or_default()
-                        .insert(target.clone());
-                }
-            }
+            let test_targets = recipe::registration_view(
+                root,
+                "test-owners",
+                &projects,
+                loaded.recipe.limits.unit_seconds,
+            )?;
             let config = read(workflow_config)?;
             let workflow_path = config["workflow_path"]
                 .as_str()
@@ -399,7 +396,12 @@ mod native {
                         .as_str()
                         .ok_or("missing frontend project registry")?,
                 )?;
-                let methods = chrono_judge_registration::execution::methods(&registrations)?;
+                let methods: BTreeMap<String, Vec<Method>> = recipe::registration_view(
+                    root,
+                    "execution-methods",
+                    &registrations,
+                    loaded.recipe.limits.unit_seconds,
+                )?;
                 let mut owners = BTreeSet::new();
                 let mut operations = Vec::new();
                 for name in profile["operations"]

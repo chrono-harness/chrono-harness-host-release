@@ -11,6 +11,7 @@ pub mod process;
 pub mod publication;
 pub mod receipt;
 pub mod recipe;
+mod registrations;
 pub mod staging;
 pub mod transport;
 pub mod verified_recipe;
