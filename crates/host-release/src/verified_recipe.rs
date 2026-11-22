@@ -35,12 +35,14 @@ pub mod publication;
 #[path = "verified_delivery.rs"]
 pub mod delivery;
 
+use vstd::contrib::exec_spec::ExecSpecEq;
+
 verus! {
 
 pub fn same_text(actual: &str, expected: &str) -> (same: bool)
     ensures same == (actual@ == expected@),
 {
-    actual.to_owned() == expected.to_owned()
+    <&str>::exec_eq(actual, expected)
 }
 
 /// 调用者显式提供角色与选择；不根据项目语言、命令或资产数推断 SDK。
