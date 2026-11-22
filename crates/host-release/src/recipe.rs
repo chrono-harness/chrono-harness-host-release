@@ -14,11 +14,11 @@ fn needs_prepare_binding(rust_required: bool, is_compiler: bool) -> (needed: boo
 }
 }
 #[cfg(not(verus_keep_ghost))]
+use crate::registrations::{self, Method};
+#[cfg(not(verus_keep_ghost))]
 use crate::verified_recipe::{self as policy, Invocation};
 #[cfg(not(verus_keep_ghost))]
 use chrono_harness::{no_symlink_parents, resolve_program};
-#[cfg(not(verus_keep_ghost))]
-use chrono_judge_registration::execution::{Method, methods};
 #[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
 #[cfg(not(verus_keep_ghost))]
@@ -42,6 +42,26 @@ fn error(message: impl std::fmt::Display) -> String {
 pub fn read_json(root: &Path, relative: &str) -> Result<Value, String> {
     let path = no_symlink_parents(root, relative)?;
     chrono_harness::json(&fs::read(&path).map_err(|e| error(format!("{}: {e}", path.display())))?)
+}
+
+#[cfg(not(verus_keep_ghost))]
+pub(crate) fn registration_view<T: serde::de::DeserializeOwned>(
+    root: &Path,
+    view: &str,
+    projects: &Value,
+    timeout_seconds: u64,
+) -> Result<T, String> {
+    registrations::query(view, projects, |program, argument, input| {
+        let spec = chrono_harness::CommandSpec {
+            program: program.to_owned(),
+            args: vec![argument.to_owned()],
+            env: BTreeMap::new(),
+            timeout_seconds,
+            output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
+        };
+        let result = chrono_harness::run_process(root, &spec, input)?;
+        Ok((result.exit_code, result.stdout_bytes, result.stderr_bytes))
+    })
 }
 
 #[cfg(not(verus_keep_ghost))]
@@ -352,7 +372,12 @@ impl Loaded {
         if bound_assets != plan.assets.keys().map(String::as_str).collect() {
             return Err(error("release staging must cover every asset"));
         }
-        let registered = methods(&read(&recipe.projects)?)?;
+        let registered: BTreeMap<String, Vec<Method>> = registration_view(
+            root,
+            "execution-methods",
+            &read(&recipe.projects)?,
+            recipe.limits.unit_seconds,
+        )?;
         if registered.values().any(|v| v.len() != 1) {
             return Err(error("ambiguous registered operation"));
         }
