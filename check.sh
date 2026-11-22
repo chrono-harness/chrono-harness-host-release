@@ -6,6 +6,8 @@ trap 'rm -rf -- "$scratch"' EXIT
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$scratch/cargo}"
 cargo fmt --check --manifest-path crates/host-release/Cargo.toml
 cargo build --locked --manifest-path crates/host-release/Cargo.toml
+cargo fmt --check --manifest-path crates/host-release-tests/Cargo.toml
+cargo test --locked --manifest-path crates/host-release-tests/Cargo.toml
 proof_bindings=()
 prove() {
   local label=$1 root=$2
