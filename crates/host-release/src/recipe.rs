@@ -52,14 +52,22 @@ pub(crate) fn registration_view<T: serde::de::DeserializeOwned>(
     timeout_seconds: u64,
 ) -> Result<T, String> {
     registrations::query(view, projects, |program, argument, input| {
+        let executable = resolve_program(root, program, None)?;
+        let digest = chrono_harness::file_identity(&executable)?.0;
         let spec = chrono_harness::CommandSpec {
-            program: program.to_owned(),
+            program: executable
+                .to_str()
+                .ok_or("invalid registration executable path")?
+                .into(),
             args: vec![argument.to_owned()],
             env: BTreeMap::new(),
             timeout_seconds,
             output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
         };
-        let result = chrono_harness::run_process(root, &spec, input)?;
+        let result = chrono_harness::run_process_observed(root, &spec, input, &digest)?;
+        if let Some(failure) = result.failure {
+            return Err(failure);
+        }
         Ok((result.exit_code, result.stdout_bytes, result.stderr_bytes))
     })
 }

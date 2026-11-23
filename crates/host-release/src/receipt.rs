@@ -680,9 +680,10 @@ pub fn read(
                 root,
                 directory,
                 declared,
-                &chrono_host_bootstrap::bindings::native_platform()?,
+                &crate::bootstrap::native_platform(loaded.recipe.limits.unit_seconds)?,
                 source,
                 selected,
+                loaded.recipe.limits.unit_seconds,
             )
         },
     )
@@ -699,7 +700,7 @@ pub(crate) fn read_at(
     validate_frontend: impl FnOnce(
         &Path,
         &crate::recipe::NativeFrontend,
-        &chrono_host_bootstrap::source::SourceObservation,
+        &crate::bootstrap::SourceObservation,
         &Selection,
     ) -> Result<Value, String>,
 ) -> Result<Verified, String> {
@@ -790,7 +791,7 @@ pub(crate) fn read_at(
         }
         original(&directory, &receipt["frontend_input"])?;
         let declared = crate::frontend::declaration(loaded, frontend)?;
-        let source = chrono_host_bootstrap::source::SourceObservation {
+        let source = crate::bootstrap::SourceObservation {
             commit: Some(text(context, "source_commit")?.into()),
             tree: Some(text(context, "source_tree")?.into()),
             dirty: Some(false),

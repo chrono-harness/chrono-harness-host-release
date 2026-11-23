@@ -486,7 +486,7 @@ impl<'a> Execution<'a> {
             self.phase = "frontend-source".into();
             let declared = frontend::declaration(self.loaded, selected)?;
             let directory = no_symlink_parents(&self.root, &declared.directory)?;
-            let source = chrono_host_bootstrap::source::SourceObservation {
+            let source = crate::bootstrap::SourceObservation {
                 commit: Some(source),
                 tree: Some(tree),
                 dirty: Some(false),
@@ -496,12 +496,17 @@ impl<'a> Execution<'a> {
                 &self.root,
                 &directory,
                 declared,
-                &chrono_host_bootstrap::bindings::native_platform()?,
+                &crate::bootstrap::native_platform(self.loaded.recipe.limits.unit_seconds)?,
                 &source,
                 selected,
                 Some(&std::env::current_exe().map_err(error)?),
+                self.loaded.recipe.limits.unit_seconds,
             )?;
-            let files = frontend::retain_metadata(&directory, &self.output.join("frontend"))?;
+            let files = frontend::retain_metadata(
+                &directory,
+                &self.output.join("frontend"),
+                self.loaded.recipe.limits.unit_seconds,
+            )?;
             let mut reference = files["frontend.json"].clone();
             reference["path"] = json!("frontend/frontend.json");
             self.report["frontend_input"] = reference;
@@ -690,7 +695,12 @@ impl<'a> Execution<'a> {
 }
 
 #[cfg(not(verus_keep_ghost))]
-fn retain_original(output: &Path, id: &str, verified: &Verified) -> Result<Value, String> {
+fn retain_original(
+    output: &Path,
+    id: &str,
+    verified: &Verified,
+    timeout_seconds: u64,
+) -> Result<Value, String> {
     let target = output.join("originals").join(id);
     fs::create_dir_all(&target).map_err(error)?;
     let source = no_symlink_parents(&verified.directory, "receipt.json")?;
@@ -722,7 +732,7 @@ fn retain_original(output: &Path, id: &str, verified: &Verified) -> Result<Value
     }
     if verified.receipt["frontend_input"].is_object() {
         for (name, mut declaration) in
-            frontend::metadata_files(&verified.directory.join("frontend"))?
+            frontend::metadata_files(&verified.directory.join("frontend"), timeout_seconds)?
         {
             let name = format!("frontend/{name}");
             declaration["path"] = json!(name);
@@ -1013,7 +1023,15 @@ fn units(execution: &mut Execution<'_>, lineage: &Lineage) -> Result<(), String>
                             .ok_or_else(|| error("missing original start"))?,
                     );
                 }
-                retained.insert(id, retain_original(&execution.output, id, original)?);
+                retained.insert(
+                    id,
+                    retain_original(
+                        &execution.output,
+                        id,
+                        original,
+                        execution.loaded.recipe.limits.unit_seconds,
+                    )?,
+                );
             }
             execution.report["originals"] = json!(retained);
             execution.report["platform_started_ns"] = json!(started);

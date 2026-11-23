@@ -17,20 +17,14 @@ pub fn artifact_paths(executable: &str, expected_executable: &str, report: &str,
 }
 }
 #[cfg(not(verus_keep_ghost))]
+use crate::bootstrap::{self, Checkout, NativePlatform, SourceObservation, Summary};
+#[cfg(not(verus_keep_ghost))]
 use crate::{
     execution::Environment,
     receipt::{self, Kind, Lineage, Selection},
     recipe::{Loaded, NativeFrontend},
     transport::{self, ExecutableIdentity},
     verified_recipe as policy,
-};
-#[cfg(not(verus_keep_ghost))]
-use chrono_host_bootstrap::{
-    bindings::{NativePlatform, native_platform},
-    construction::Report,
-    original::Producer,
-    profile,
-    source::{self, SourceObservation},
 };
 #[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
@@ -62,32 +56,13 @@ fn variable<'a>(environment: &'a Environment, name: &str) -> Result<&'a str, Str
 }
 
 #[cfg(not(verus_keep_ghost))]
-fn producer(
-    root: &Path,
-    declared: &NativeFrontend,
-    native: &NativePlatform,
-) -> Result<Producer, String> {
-    Producer::read(&declared.bootstrap_profile, native, &|path| {
-        profile::read(root, path, b"")
-    })
-    .map_err(error)
-}
-
-#[cfg(not(verus_keep_ghost))]
-fn qualify(
-    producer: &Producer,
-    raw: &[u8],
-    source: &SourceObservation,
-    stream: &impl Fn(&str) -> Result<Vec<u8>, String>,
-    identity: &ExecutableIdentity,
-) -> Result<Report, String> {
-    let report = producer.validate(raw, source, stream).map_err(error)?;
-    let planned = producer.profile.install.first();
+fn qualify(report: &Summary, identity: &ExecutableIdentity) -> Result<(), String> {
+    let planned = report.destinations.first();
     let installed = report.installed.first();
     if !policy::frontend_installation(
-        producer.profile.install.len() as u64,
+        report.destinations.len() as u64,
         report.installed.len() as u64,
-        planned.map(|p| p.destination.as_str()).unwrap_or(""),
+        planned.map(String::as_str).unwrap_or(""),
         installed.map(|p| p.path.as_str()).unwrap_or(""),
         installed.map(|p| p.sha256.as_str()).unwrap_or(""),
         &identity.sha256,
@@ -96,7 +71,7 @@ fn qualify(
             "original bootstrap installation differs from release frontend",
         ));
     }
-    Ok(report)
+    Ok(())
 }
 
 #[cfg(not(verus_keep_ghost))]
@@ -159,15 +134,17 @@ pub fn export(root: &Path, output: &Path, environment: &Environment) -> Result<(
         .values()
         .find(|f| f.job == lineage.job)
         .ok_or_else(|| error("unregistered frontend producing job"))?;
-    let native = native_platform()?;
-    let source = source::observe(&root, environment);
-    let producer = producer(&root, declared, &native)?;
-    let report_path = producer
-        .profile
-        .report_path
-        .as_deref()
-        .ok_or("missing bootstrap report path")?;
-    let raw = profile::read(&root, report_path, b".chrono-harness/state/")?;
+    let Checkout {
+        platform: native,
+        source,
+        report: raw,
+        summary,
+    } = bootstrap::query(
+        &root,
+        environment,
+        &json!({"operation":"checkout","profile":declared.bootstrap_profile}),
+        loaded.recipe.limits.unit_seconds,
+    )?;
     let identity = transport::observe(&root, INSTALLED)?;
     // Cargo may execute the freshly built frontend with a different mode from
     // the bootstrap installation. The installed identity remains the source
@@ -180,13 +157,7 @@ pub fn export(root: &Path, output: &Path, environment: &Environment) -> Result<(
             "executing frontend differs from bootstrap installation",
         ));
     }
-    let report = qualify(
-        &producer,
-        &raw,
-        &source,
-        &|path| profile::read(&root, path, b".chrono-harness/state/"),
-        &identity,
-    )?;
+    qualify(&summary, &identity)?;
     // create_dir 拒绝任何已有输出，包括链接；失败的部分输出保留供诊断。
     fs::create_dir(output).map_err(error)?;
     let workflow = if environment
@@ -212,17 +183,22 @@ pub fn export(root: &Path, output: &Path, environment: &Environment) -> Result<(
     if !same(&packed.executable, &identity) {
         return Err(error("installed frontend changed during export"));
     }
-    let bootstrap = write(output, &declared.bootstrap_report, &raw)?;
-    for operation in &report.operations {
-        for stream in [&operation.stdout, &operation.stderr] {
-            let path = receipt::original(&root, &serde_json::to_value(stream).map_err(error)?)?;
-            write(output, &stream.path, &fs::read(path).map_err(error)?)?;
-        }
+    let bootstrap = write(output, &declared.bootstrap_report, raw.as_bytes())?;
+    for stream in summary.streams {
+        let path = receipt::original(&root, &stream)?;
+        write(
+            output,
+            text(&stream, "path")?,
+            &fs::read(path).map_err(error)?,
+        )?;
     }
-    if !chrono_host_bootstrap::verified_bindings::observation_matches(
-        &source,
-        &source::observe(&root, environment),
-    ) {
+    let after: SourceObservation = bootstrap::query(
+        &root,
+        environment,
+        &json!({"operation":"source"}),
+        loaded.recipe.limits.unit_seconds,
+    )?;
+    if after != source {
         return Err(error("frontend source changed during export"));
     }
     let manifest = json!({"schema":"chrono-release-frontend/v1", "source":source,
@@ -258,26 +234,37 @@ pub fn validate_metadata(
     native: &NativePlatform,
     source: &SourceObservation,
     selected: &Selection,
+    timeout_seconds: u64,
 ) -> Result<Value, String> {
-    let producer = producer(root, declared, native)?;
-    validate_producer_metadata(directory, declared, native, source, selected, &producer)
+    validate_producer_metadata(
+        root,
+        directory,
+        declared,
+        native,
+        source,
+        selected,
+        None,
+        timeout_seconds,
+    )
 }
 
 #[cfg(not(verus_keep_ghost))]
 pub(crate) fn validate_producer_metadata(
+    root: &Path,
     directory: &Path,
     declared: &NativeFrontend,
     native: &NativePlatform,
     source: &SourceObservation,
     selected: &Selection,
-    producer: &Producer,
+    revision: Option<(&str, &str)>,
+    timeout_seconds: u64,
 ) -> Result<Value, String> {
     let manifest = crate::recipe::read_json(directory, "frontend.json")?;
     let lineage: Lineage = serde_json::from_value(manifest["lineage"].clone()).map_err(error)?;
     let declared_source: SourceObservation =
         serde_json::from_value(manifest["source"].clone()).map_err(error)?;
     lineage.validate()?;
-    if !chrono_host_bootstrap::verified_bindings::observation_matches(&declared_source, source) {
+    if &declared_source != source {
         return Err(error("frontend source observation differs"));
     }
     if !policy::frontend_header(
@@ -316,16 +303,18 @@ pub(crate) fn validate_producer_metadata(
     }
     let identity = ExecutableIdentity::from_receipt(&manifest["executable"])?;
     let raw = fs::read(receipt::original(directory, &manifest["bootstrap"])?).map_err(error)?;
-    qualify(
-        producer,
-        &raw,
-        source,
-        &|path| {
-            let file = chrono_harness::no_symlink_parents(directory, path)?;
-            fs::read(file).map_err(error)
-        },
-        &identity,
+    let report: Summary = bootstrap::query(
+        root,
+        &std::env::vars_os().collect(),
+        &json!({
+            "operation":"retained","profile":declared.bootstrap_profile,"platform":native,
+            "source":source,"report":std::str::from_utf8(&raw).map_err(error)?,
+            "directory":fs::canonicalize(directory).map_err(error)?,
+            "revision":revision.map(|(commit,tree)|json!({"commit":commit,"tree":tree}))
+        }),
+        timeout_seconds,
     )?;
+    qualify(&report, &identity)?;
     Ok(manifest)
 }
 
@@ -340,8 +329,17 @@ pub fn validate(
     source: &SourceObservation,
     selected: &Selection,
     executing: Option<&Path>,
+    timeout_seconds: u64,
 ) -> Result<Value, String> {
-    let manifest = validate_metadata(root, directory, declared, native, source, selected)?;
+    let manifest = validate_metadata(
+        root,
+        directory,
+        declared,
+        native,
+        source,
+        selected,
+        timeout_seconds,
+    )?;
     let identity = ExecutableIdentity::from_receipt(&manifest["executable"])?;
     let archive = receipt::original(directory, &manifest["archive"])?;
     transport::validate(
@@ -369,12 +367,20 @@ pub fn validate(
 
 /// 逐个列出原元数据；不扫描目录，也不复制二进制或其归档。
 #[cfg(not(verus_keep_ghost))]
-pub fn metadata_files(directory: &Path) -> Result<BTreeMap<String, Value>, String> {
+pub fn metadata_files(
+    directory: &Path,
+    timeout_seconds: u64,
+) -> Result<BTreeMap<String, Value>, String> {
     let path = chrono_harness::no_symlink_parents(directory, "frontend.json")?;
     let (sha256, size) = chrono_harness::file_identity(&path)?;
     let manifest = crate::recipe::read_json(directory, "frontend.json")?;
     let raw = fs::read(receipt::original(directory, &manifest["bootstrap"])?).map_err(error)?;
-    let report: Report = chrono_harness::decode(&raw)?;
+    let streams: Vec<Value> = bootstrap::query(
+        directory,
+        &std::env::vars_os().collect(),
+        &json!({"operation":"streams","report":std::str::from_utf8(&raw).map_err(error)?}),
+        timeout_seconds,
+    )?;
     let mut files = BTreeMap::from([(
         "frontend.json".into(),
         json!({"path":"frontend.json","sha256":sha256,"size":size}),
@@ -388,16 +394,19 @@ pub fn metadata_files(directory: &Path) -> Result<BTreeMap<String, Value>, Strin
         Ok(())
     };
     insert(manifest["bootstrap"].clone())?;
-    for operation in report.operations {
-        insert(serde_json::to_value(operation.stdout).map_err(error)?)?;
-        insert(serde_json::to_value(operation.stderr).map_err(error)?)?;
+    for stream in streams {
+        insert(stream)?;
     }
     Ok(files)
 }
 
 #[cfg(not(verus_keep_ghost))]
-pub fn retain_metadata(directory: &Path, output: &Path) -> Result<BTreeMap<String, Value>, String> {
-    let files = metadata_files(directory)?;
+pub fn retain_metadata(
+    directory: &Path,
+    output: &Path,
+    timeout_seconds: u64,
+) -> Result<BTreeMap<String, Value>, String> {
+    let files = metadata_files(directory, timeout_seconds)?;
     fs::create_dir(output).map_err(error)?;
     for (name, declaration) in &files {
         let path = receipt::original(directory, declaration)?;
