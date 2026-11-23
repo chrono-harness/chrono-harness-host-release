@@ -10,7 +10,6 @@ doctest = false
 
 [dependencies]
 vstd = "=0.0.0-2026-04-20-1748"
-chrono-host-bootstrap = { git = "https://github.com/chrono-harness/chrono-harness-host-bootstrap.git", rev = "282ca5d505ac3274ed63f6c4294c4982351b5e25" }
 chrono-harness = { git = "https://github.com/chrono-harness/chrono-harness-runner.git", rev = "a1cff08f74d996d618372f20adc203d1b5904d50" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

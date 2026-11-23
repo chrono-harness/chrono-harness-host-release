@@ -427,8 +427,8 @@ fn perform(
         root,
         &no_symlink_parents(root, &declared.directory)?,
         declared,
-        &chrono_host_bootstrap::bindings::native_platform()?,
-        &chrono_host_bootstrap::source::SourceObservation {
+        &crate::bootstrap::native_platform(loaded.recipe.limits.unit_seconds)?,
+        &crate::bootstrap::SourceObservation {
             commit: Some(commit.clone()),
             tree: Some(tree.clone()),
             dirty: Some(false),
@@ -436,6 +436,7 @@ fn perform(
         },
         &selected,
         Some(&std::env::current_exe().map_err(error)?),
+        loaded.recipe.limits.unit_seconds,
     )?;
     let promoted = if identity.channel == identity::Channel::Stable {
         Some(promotion::prepare(
@@ -981,8 +982,8 @@ pub fn install(
             &root,
             &no_symlink_parents(&root, &declared.directory)?,
             declared,
-            &chrono_host_bootstrap::bindings::native_platform()?,
-            &chrono_host_bootstrap::source::SourceObservation {
+            &crate::bootstrap::native_platform(loaded.recipe.limits.unit_seconds)?,
+            &crate::bootstrap::SourceObservation {
                 commit: Some(commit.clone()),
                 tree: Some(tree.clone()),
                 dirty: Some(false),
@@ -990,6 +991,7 @@ pub fn install(
             },
             &selected,
             Some(&std::env::current_exe().map_err(error)?),
+            loaded.recipe.limits.unit_seconds,
         )?;
         let platform = &config
             .packages

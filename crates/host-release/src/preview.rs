@@ -22,6 +22,7 @@ pub use native::{Recovery, select_landing, write_plan};
 
 #[cfg(not(verus_keep_ghost))]
 mod native {
+    use crate::committed::Committed;
     use crate::registrations::Method;
     use crate::{
         execution::Environment,
@@ -29,7 +30,6 @@ mod native {
         receipt::{self, Kind, Lineage, Selection},
         recipe::{self, Loaded, Unit},
     };
-    use chrono_host_bootstrap::source::Committed;
     use serde::{Deserialize, Serialize};
     use serde_json::Value;
     use std::{
@@ -683,7 +683,7 @@ mod native {
                 );
             }
         };
-        let native = chrono_host_bootstrap::bindings::NativePlatform {
+        let native = crate::bootstrap::NativePlatform {
             system: system.into(),
             machine: machine.into(),
         };
@@ -715,11 +715,6 @@ mod native {
                 ));
             }
         }
-        let producer = chrono_host_bootstrap::original::Producer::read(
-            &frontend.bootstrap_profile,
-            &native,
-            &|path| fixed.read(path),
-        )?;
         let parent = Lineage {
             kind: Kind::Github,
             job: package_selection.job.clone(),
@@ -795,28 +790,28 @@ mod native {
                     let fixed = Committed::new(root, environment, &key.0, &key.1)?;
                     let recipe =
                         Loaded::load_from(root, |path| chrono_harness::json(&fixed.read(path)?))?;
-                    let producer = chrono_host_bootstrap::original::Producer::read(
-                        &recipe
-                            .recipe
-                            .native_frontends
-                            .get(platform)
-                            .ok_or("missing original platform frontend")?
-                            .bootstrap_profile,
-                        &native,
-                        &|path| fixed.read(path),
-                    )?;
-                    entry.insert((recipe, producer));
+                    entry.insert(recipe);
                 }
-                let (recipe, producer) = &previous_sources[&key];
+                let recipe = &previous_sources[&key];
                 inherited_parent = Lineage {
                     kind: Kind::Github,
                     job: origin.collector.job.clone(),
                     run_id: origin.collector.run_id.clone(),
                     attempt: origin.collector.attempt.clone(),
                 };
-                (recipe, producer, &original_context, &inherited_parent)
+                (
+                    recipe,
+                    (&origin.release.source_commit, &origin.release.source_tree),
+                    &original_context,
+                    &inherited_parent,
+                )
             } else {
-                (loaded, &producer, context, &parent)
+                (
+                    loaded,
+                    (&previous.source_commit, &previous.source_tree),
+                    context,
+                    &parent,
+                )
             };
             let verified = receipt::read_at(
                 source_recipe,
@@ -830,12 +825,14 @@ mod native {
                         return Err("previous unit consumed another platform frontend".into());
                     }
                     crate::frontend::validate_producer_metadata(
+                        root,
                         directory,
                         declared,
                         &native,
                         source,
                         selection,
-                        source_producer,
+                        Some((source_producer.0.as_str(), source_producer.1.as_str())),
+                        loaded.recipe.limits.unit_seconds,
                     )
                 },
             )?;

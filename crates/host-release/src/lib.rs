@@ -1,6 +1,10 @@
 //! 本仓发布配方的 Rust 实现；工作流投影继续归 chrono-ci。
 #![allow(unexpected_cfgs)]
 
+#[cfg(not(verus_keep_ghost))]
+pub mod bootstrap;
+#[cfg(not(verus_keep_ghost))]
+pub mod committed;
 pub mod delivery;
 pub mod evidence;
 pub mod execution;
