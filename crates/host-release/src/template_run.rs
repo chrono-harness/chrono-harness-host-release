@@ -578,6 +578,10 @@ enum Publication {
         expected: Vec<String>,
         lines: Vec<String>,
     },
+    Notes {
+        expected: String,
+        release: Value,
+    },
     State {
         tag: String,
         source: String,
@@ -615,6 +619,10 @@ pub fn publication(input: impl Read) -> Result<Value, String> {
             }
             Ok(Value::Null)
         }
+        Publication::Notes { expected, release } => Ok(Value::Bool(policy::text_fields(&[(
+            release["body"].as_str(),
+            &expected,
+        )]))),
         Publication::Checksums {
             mut expected,
             mut lines,
