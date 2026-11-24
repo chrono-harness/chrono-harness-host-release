@@ -41,7 +41,7 @@ stem=${metadata%/*}/${stem%.rmeta}
 chrono-host-bootstrap check-compiler-sources native "$stem" \
   src/lib.rs src/verified_recipe.rs src/verified_delivery.rs src/recipe.rs \
   src/frontend.rs src/execution.rs src/receipt.rs src/preview.rs \
-  src/staging.rs src/delivery.rs src/publication.rs ||
+  src/staging.rs src/delivery.rs src/publication.rs src/template_run.rs ||
   coverage_failure "native library differs from required sources"
 
 # The CLI root participates in the proof and is compiled as Cargo's binary target.

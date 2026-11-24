@@ -29,6 +29,14 @@ fn run() -> Result<i32, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     match args.as_slice() {
+        [command] if command == "template-acceptance-v1" => {
+            chrono_host_release::template_run::acceptance(std::io::stdin().lock())?;
+            Ok(0)
+        },
+        [command] if command == "template-run-v1" => {
+            chrono_host_release::template_run::check(std::io::stdin().lock())?;
+            Ok(0)
+        },
         [root, output, flag, config, collection] if select_preview_command(flag) => delivery::select_preview(
             Path::new(root), Path::new(output), config, collection, &std::env::vars_os().collect(),
         ),
