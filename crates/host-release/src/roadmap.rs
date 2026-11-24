@@ -6,6 +6,7 @@ use verus_builtin_macros::verus;
 use vstd::contrib::exec_spec::ExecSpecEq;
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
+use vstd::slice::slice_subrange;
 
 verus! {
 
@@ -42,6 +43,91 @@ pub fn owns_failure(pull: bool, login: &str, body: &[u8], marker: &[u8]) -> (own
     }
     assert(body@.take(marker.len() as int) =~= marker@);
     true
+}
+
+pub open spec fn marker_at(text: Seq<u8>, marker: Seq<u8>, index: int) -> bool {
+    0 <= index && index + marker.len() <= text.len()
+        && text.subrange(index, index + marker.len()) == marker
+}
+
+pub open spec fn first_at(text: Seq<u8>, marker: Seq<u8>, index: int) -> bool {
+    marker_at(text, marker, index)
+        && forall|earlier: int| 0 <= earlier < index ==> !marker_at(text, marker, earlier)
+}
+
+fn matches_at(text: &[u8], marker: &[u8], index: usize) -> (found: bool)
+    requires index <= text.len(), marker.len() <= text.len() - index,
+    ensures found == marker_at(text@, marker@, index as int),
+{
+    let mut offset = 0;
+    while offset < marker.len()
+        invariant offset <= marker.len(), index <= text.len(), marker.len() <= text.len() - index,
+            forall|j: int| 0 <= j < offset ==> text@[index + j] == marker@[j],
+        decreases marker.len() - offset,
+    {
+        if text[index + offset] != marker[offset] {
+            assert(text@.subrange(index as int, index + marker.len())[offset as int] != marker@[offset as int]);
+            return false;
+        }
+        offset += 1;
+    }
+    assert(text@.subrange(index as int, index + marker.len()) =~= marker@);
+    true
+}
+
+fn first_marker(text: &[u8], marker: &[u8]) -> (found: Option<usize>)
+    requires marker.len() > 0,
+    ensures
+        found.is_some() ==> first_at(text@, marker@, found.unwrap() as int),
+        found.is_none() ==> forall|i: int| !marker_at(text@, marker@, i),
+{
+    let mut index = 0;
+    while index <= text.len() && marker.len() <= text.len() - index
+        invariant index <= text.len(), marker.len() > 0,
+            forall|i: int| 0 <= i < index ==> !marker_at(text@, marker@, i),
+        decreases text.len() - index,
+    {
+        if matches_at(text, marker, index) { return Some(index); }
+        index += 1;
+    }
+    None
+}
+
+/// Replace the first ordered pair. A lone or reversed first marker is invalid.
+pub fn release_block(text: &[u8], begin: &[u8], end: &[u8], block: &[u8]) -> (result: Option<Vec<u8>>)
+    requires begin.len() > 0, end.len() > 0,
+    ensures
+        !(exists|i:int| marker_at(text@,begin@,i)) && !(exists|i:int| marker_at(text@,end@,i)) ==>
+            result.is_some() && result.unwrap()@ ==
+                (if text.len() == 0 { block@ } else { text@ + seq![10u8, 10u8] + block@ }),
+        forall|b:int, e:int| #[trigger] first_at(text@,begin@,b) && #[trigger] first_at(text@,end@,e) ==>
+            (result.is_some() == (b <= e) && (b <= e ==> result.unwrap()@ ==
+                text@.take(b) + block@ + text@.skip(e + end.len()))),
+        ((exists|i:int| marker_at(text@,begin@,i)) != (exists|i:int| marker_at(text@,end@,i)))
+            ==> result.is_none(),
+{
+    let mut output = Vec::new();
+    match (first_marker(text, begin), first_marker(text, end)) {
+        (None, None) => {
+            if text.len() > 0 {
+                output.extend_from_slice(text);
+                output.push(10u8);
+                output.push(10u8);
+                assert(output@ =~= text@ + seq![10u8, 10u8]);
+            }
+            output.extend_from_slice(block);
+        }
+        (Some(b), Some(e)) if b <= e => {
+            assert(first_at(text@,end@,e as int));
+            assert(e + end.len() <= text.len());
+            output.extend_from_slice(slice_subrange(text, 0, b));
+            output.extend_from_slice(block);
+            output.extend_from_slice(slice_subrange(text, e + end.len(), text.len()));
+            assert(output@ =~= text@.take(b as int) + block@ + text@.skip(e + end.len()));
+        }
+        _ => return None,
+    }
+    Some(output)
 }
 
 #[cfg_attr(not(verus_keep_ghost), derive(Serialize))]
@@ -111,6 +197,11 @@ enum Query {
         final_release: bool,
         open_issues: u64,
     },
+    ReleaseBlock {
+        milestone: u64,
+        original: String,
+        lines: Vec<String>,
+    },
     ReleaseRun {
         status: String,
         conclusion: Option<String>,
@@ -177,6 +268,27 @@ pub fn run(input: impl std::io::Read, output: impl std::io::Write) -> Result<i32
             final_release,
             open_issues,
         } => json!(milestone_state(final_release, open_issues)),
+        Query::ReleaseBlock {
+            milestone,
+            original,
+            lines,
+        } => {
+            let begin = "<!-- chrono-harness release -->";
+            let end = "<!-- /chrono-harness release -->";
+            let block = std::iter::once(begin)
+                .chain(lines.iter().map(String::as_str))
+                .chain(std::iter::once(end))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let bytes = release_block(
+                original.as_bytes(),
+                begin.as_bytes(),
+                end.as_bytes(),
+                block.as_bytes(),
+            )
+            .ok_or_else(|| format!("Incomplete release block in milestone {milestone}"))?;
+            json!(String::from_utf8(bytes).map_err(|e| e.to_string())?)
+        }
         Query::ReleaseRun { status, conclusion } => json!(!matches!(
             release_result(&status, conclusion.as_deref().unwrap_or("")),
             ReleaseResult::Unrelated

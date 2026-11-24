@@ -221,6 +221,38 @@ fn roadmap_uses_only_public_releases_unassigned_open_issues_and_completed_milest
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn first_release_block_keeps_surrounding_bytes_and_rejects_a_reversed_pair() {
+    use policy::roadmap::release_block;
+    #[cfg(verus_keep_ghost)]
+    use policy::roadmap::{first_at, marker_at};
+    broadcast use vstd::array::group_array_axioms;
+    let begin = [1u8];
+    let end = [2u8];
+    let block = [7u8];
+    let text = [9u8, 1, 2, 8, 1, 2];
+    let reversed = [2u8, 1];
+    proof {
+        assert(text@.subrange(1, 2) =~= begin@);
+        assert(text@.subrange(2, 3) =~= end@);
+        assert forall|i:int| 0 <= i < 2 implies !marker_at(text@,end@,i) by {
+            assert(text@.subrange(i,i+1)[0] == text@[i]);
+        }
+        assert(text@.subrange(0,1)[0] != begin@[0]);
+        assert(first_at(text@,begin@,1) && first_at(text@,end@,2));
+        assert(reversed@.subrange(0,1) =~= end@);
+        assert(reversed@.subrange(1,2) =~= begin@);
+        assert(reversed@.subrange(0,1)[0] != begin@[0]);
+        assert(first_at(reversed@,begin@,1) && first_at(reversed@,end@,0));
+    }
+    let result = release_block(&text,&begin,&end,&block);
+    expect_recipe(result.is_some());
+    let bytes = result.unwrap();
+    expect_recipe(bytes.len() == 5 && bytes[0] == 9 && bytes[1] == 7
+        && bytes[2] == 8 && bytes[3] == 1 && bytes[4] == 2);
+    expect_recipe(release_block(&reversed,&begin,&end,&block).is_none());
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn roadmap_updates_only_its_own_original_issue_across_release_attempts() {
     use policy::roadmap::{IssueAction,owns_failure,release_issue};
     broadcast use vstd::array::group_array_axioms;
