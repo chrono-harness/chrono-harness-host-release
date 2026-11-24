@@ -13,6 +13,8 @@ pub fn canonical_positive(value: u64, canonical: bool) -> (valid: bool)
 }
 
 #[cfg(not(verus_keep_ghost))]
+use crate::files::{file_identity, no_symlink_parents};
+#[cfg(not(verus_keep_ghost))]
 use crate::{
     execution::Environment,
     identity,
@@ -20,8 +22,6 @@ use crate::{
     receipt,
     recipe::{self, Loaded},
 };
-#[cfg(not(verus_keep_ghost))]
-use chrono_harness::{file_identity, no_symlink_parents};
 #[cfg(not(verus_keep_ghost))]
 use serde::Deserialize;
 #[cfg(not(verus_keep_ghost))]
@@ -258,7 +258,7 @@ impl Commands for Executor<'_> {
         let environment = self
             .environment
             .iter()
-            .filter(|(key, _)| key.as_os_str() != OsStr::new(chrono_harness::process_fds::ENV))
+            .filter(|(key, _)| key.as_os_str() != OsStr::new(crate::observed::DESCRIPTORS))
             .map(|(k, v)| {
                 Ok((
                     k.to_str().ok_or("non UTF-8 environment key")?.into(),
@@ -266,12 +266,12 @@ impl Commands for Executor<'_> {
                 ))
             })
             .collect::<Result<BTreeMap<_, _>, String>>()?;
-        let spec = chrono_harness::CommandSpec {
+        let spec = crate::observed::CommandSpec {
             program: program.to_str().ok_or("invalid delivery tool path")?.into(),
             args: args.to_vec(),
             env: environment,
             timeout_seconds: timeout.as_secs().saturating_add(1),
-            output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
+            output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
         };
         let index = self.report["processes"]
             .as_array()
@@ -329,7 +329,7 @@ pub(crate) fn workflow_preflight(
         .tools
         .get("git")
         .ok_or("missing release Git")?;
-    let git = chrono_harness::resolve_program(root, program, Some(env(environment, "PATH")?))?;
+    let git = crate::files::resolve_program(root, program, Some(env(environment, "PATH")?))?;
     let mut executor = Executor {
         root,
         output,
@@ -413,7 +413,7 @@ fn perform(
     let (commit, tree) = source(executor)?;
     let identity = identity::resolve(&loaded.plan.version, &commit, &tree, environment)?;
     executor.report["identity"] = serde_json::to_value(&identity).map_err(error)?;
-    let needs = chrono_harness::json(env(environment, "CHRONO_RELEASE_DEPENDENCIES")?.as_bytes())?;
+    let needs = crate::codec::json(env(environment, "CHRONO_RELEASE_DEPENDENCIES")?.as_bytes())?;
     let run = env(environment, "CHRONO_RELEASE_RUN")?;
     let attempt = env(environment, "CHRONO_RELEASE_ATTEMPT")?;
     executor.report["dependencies"] = needs.clone();
@@ -588,7 +588,7 @@ pub fn select_preview(
     let config: Config =
         serde_json::from_value(recipe::read_json(&root, config_path)?).map_err(error)?;
     config.publication.validate()?;
-    let output = chrono_harness::no_symlink_parents(
+    let output = crate::files::no_symlink_parents(
         &root,
         output.to_str().ok_or("invalid selection output path")?,
     )?;
@@ -600,7 +600,7 @@ pub fn select_preview(
         .map(|(key, program)| {
             Ok((
                 key.clone(),
-                chrono_harness::resolve_program(&root, program, Some(env(environment, "PATH")?))?,
+                crate::files::resolve_program(&root, program, Some(env(environment, "PATH")?))?,
             ))
         })
         .collect::<Result<_, String>>()?;
@@ -664,7 +664,7 @@ pub fn run(
         .map(|(name, program)| {
             Ok((
                 name.clone(),
-                chrono_harness::resolve_program(&root, program, Some(search))?,
+                crate::files::resolve_program(&root, program, Some(search))?,
             ))
         })
         .collect::<Result<_, String>>()?;
@@ -935,7 +935,7 @@ pub fn install(
         .map(|(name, program)| {
             Ok((
                 name.clone(),
-                chrono_harness::resolve_program(&root, program, Some(search))?,
+                crate::files::resolve_program(&root, program, Some(search))?,
             ))
         })
         .collect::<Result<_, String>>()?;
@@ -954,7 +954,7 @@ pub fn install(
         let identity = identity::resolve(&loaded.plan.version, &commit, &tree, environment)?;
         executor.report["identity"] = serde_json::to_value(&identity).map_err(error)?;
         let needs =
-            chrono_harness::json(env(environment, "CHRONO_RELEASE_DEPENDENCIES")?.as_bytes())?;
+            crate::codec::json(env(environment, "CHRONO_RELEASE_DEPENDENCIES")?.as_bytes())?;
         let run = env(environment, "CHRONO_RELEASE_RUN")?;
         let attempt = env(environment, "CHRONO_RELEASE_ATTEMPT")?;
         let selected = select(&config.installation.publisher, &needs, run, attempt)?;
@@ -998,9 +998,8 @@ pub fn install(
             .get(native)
             .ok_or("unknown installation platform")?
             .platform;
-        let shell =
-            chrono_harness::resolve_program(&root, &config.installation.shell, Some(search))?;
-        let curl = chrono_harness::resolve_program(&root, &config.curl, Some(search))?;
+        let shell = crate::files::resolve_program(&root, &config.installation.shell, Some(search))?;
+        let curl = crate::files::resolve_program(&root, &config.curl, Some(search))?;
         let public_launcher = format!(
             "https://github.com/{}/releases/download/{}/install.sh",
             config.publication.repository, identity.version
@@ -1042,6 +1041,7 @@ pub fn install(
 /// 晋升沿用本发布者；IO 编排不另建发布入口。
 #[cfg(not(verus_keep_ghost))]
 pub mod promotion {
+    use crate::files::{file_identity, no_symlink_parents};
     use crate::{
         delivery::{self, Package},
         execution::Environment,
@@ -1051,7 +1051,6 @@ pub mod promotion {
         recipe::{self, Loaded},
         verified_recipe::delivery as policy,
     };
-    use chrono_harness::{file_identity, no_symlink_parents};
     use serde::Deserialize;
     use serde_json::{Value, json};
     use std::{

@@ -1,9 +1,10 @@
 //! 本地发布驱动：固定 Git 源、独立检出、有限并发和原生阻塞完成通道。
+use crate::files::{file_identity, no_symlink_parents};
+use crate::observed::CommandSpec;
 use crate::{
     execution::Environment,
     recipe::{Loaded, Scope},
 };
-use chrono_harness::{CommandSpec, file_identity, no_symlink_parents};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -71,7 +72,7 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
                 .write(true)
                 .open(&target)
                 .map_err(error)?;
-            let actual = chrono_harness::copy_hashed(input, &mut output)?;
+            let actual = crate::files::copy_hashed(input, &mut output)?;
             output.flush().map_err(error)?;
             fs::set_permissions(&target, metadata.permissions()).map_err(error)?;
             if actual != expected
@@ -122,7 +123,7 @@ impl Driver<'_> {
         let env = environment
             .iter()
             .filter(|(key, _)| {
-                key.as_os_str() != std::ffi::OsStr::new(chrono_harness::process_fds::ENV)
+                key.as_os_str() != std::ffi::OsStr::new(crate::observed::DESCRIPTORS)
             })
             .map(|(key, value)| {
                 Ok((
@@ -143,11 +144,14 @@ impl Driver<'_> {
             program: program.clone(),
             args: args.to_vec(),
             env,
-            timeout_seconds: timeout.as_secs().max(1),
-            output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
+            timeout_seconds: timeout
+                .as_secs()
+                .saturating_add(u64::from(timeout.subsec_nanos() != 0))
+                .max(1),
+            output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
         };
         let started = timestamp()?;
-        let observed = chrono_harness::run_process_observed_for(
+        let observed = crate::observed::run_process_observed_for(
             root,
             &spec,
             &[],
@@ -163,8 +167,7 @@ impl Driver<'_> {
         ] {
             let path = logs.join(format!("{index}.{stream}"));
             let relative = path.strip_prefix(&self.output).map_err(error)?;
-            let mut declaration =
-                json!({"size":bytes.len(),"sha256":chrono_harness::sha256(bytes)});
+            let mut declaration = json!({"size":bytes.len(),"sha256":crate::files::sha256(bytes)});
             match write(&path, bytes) {
                 Ok(()) => declaration["path"] = json!(text(relative)?),
                 Err(failure) => {
@@ -268,7 +271,7 @@ impl Driver<'_> {
             }
             self.process(&clone, &logs, &mut records, argv, &environment)?;
             let raw = fs::read(handoff.join("receipt.json")).map_err(error)?;
-            let receipt = chrono_harness::json(&raw)?;
+            let receipt = crate::codec::json(&raw)?;
             if receipt["status"] != "passed"
                 || receipt["context"]["source_commit"] != self.source
                 || receipt["lineage"]
@@ -278,7 +281,7 @@ impl Driver<'_> {
                     "local child has no matching passing original receipt",
                 ));
             }
-            outputs = json!({"artifact_id":chrono_harness::sha256(&raw),"run_id":self.run_id,"attempt":"1"});
+            outputs = json!({"artifact_id":crate::files::sha256(&raw),"run_id":self.run_id,"attempt":"1"});
             Ok(())
         })();
         let mut result = json!({"result":if outcome.is_ok() {"success"} else {"failure"},"outputs":outputs,"processes":records});
@@ -356,9 +359,7 @@ pub fn run(root: &Path, output: &Path, environment: Environment) -> Result<i32, 
     // 验证前不创建输出；引导命令也使用同一所有者等待原进程和后代。
     let env = environment
         .iter()
-        .filter(|(key, _)| {
-            key.as_os_str() != std::ffi::OsStr::new(chrono_harness::process_fds::ENV)
-        })
+        .filter(|(key, _)| key.as_os_str() != std::ffi::OsStr::new(crate::observed::DESCRIPTORS))
         .map(|(key, value)| {
             Ok((
                 key.to_str()
@@ -378,10 +379,10 @@ pub fn run(root: &Path, output: &Path, environment: Environment) -> Result<i32, 
             args: args.iter().map(|s| (*s).to_owned()).collect(),
             env: env.clone(),
             timeout_seconds: loaded.recipe.limits.unit_seconds,
-            output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
+            output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
         };
         let process =
-            chrono_harness::run_process_observed(&root, &command, &[], &file_identity(&git)?.0)?;
+            crate::observed::run_process_observed(&root, &command, &[], &file_identity(&git)?.0)?;
         source_observations.push(json!({"argv":process.argv,"cwd":process.cwd,"pid":process.child_pid,"sha256":process.sha256,"environment_digest":process.environment_digest,"exit_code":process.exit_code,"failure":process.failure,"stdout":{"bytes":process.stdout_bytes,"sha256":process.stdout_sha256},"stderr":{"bytes":process.stderr_bytes,"sha256":process.stderr_sha256}}));
         if process.exit_code != 0 || process.failure.is_some() {
             return Err(error(format!(
@@ -452,7 +453,7 @@ pub fn run(root: &Path, output: &Path, environment: Environment) -> Result<i32, 
         fs::remove_dir(&accepted).map_err(error)?;
         Ok(())
     })();
-    let metadata = json!({"schema":"chrono-release-local/v1","source_commit":driver.source,"run_id":driver.run_id,"started_ns":started_ns,"finished_ns":timestamp()?,"status":if outcome.is_ok() {"passed"} else {"failed"},"units":outcomes,"source_observations":source_observations,"driver_tools":{"git":{"path":driver.git,"sha256":file_identity(&driver.git)?.0},"producer":{"path":driver.executable,"sha256":file_identity(&driver.executable)?.0}},"output_limit_bytes":chrono_harness::verified_limits::MAX_OUTPUT_BYTES,"error":outcome.as_ref().err()});
+    let metadata = json!({"schema":"chrono-release-local/v1","source_commit":driver.source,"run_id":driver.run_id,"started_ns":started_ns,"finished_ns":timestamp()?,"status":if outcome.is_ok() {"passed"} else {"failed"},"units":outcomes,"source_observations":source_observations,"driver_tools":{"git":{"path":driver.git,"sha256":file_identity(&driver.git)?.0},"producer":{"path":driver.executable,"sha256":file_identity(&driver.executable)?.0}},"output_limit_bytes":crate::observed::MAX_OUTPUT_BYTES,"error":outcome.as_ref().err()});
     write(
         &output.join("local.json"),
         &serde_json::to_vec_pretty(&metadata).map_err(error)?,

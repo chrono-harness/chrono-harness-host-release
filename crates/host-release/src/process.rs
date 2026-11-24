@@ -21,7 +21,7 @@ impl CapturedStream {
     pub fn receipt(&self) -> Value {
         let mut value = json!({
             "size": self.bytes.len(),
-            "sha256": chrono_harness::sha256(&self.bytes),
+            "sha256": crate::files::sha256(&self.bytes),
         });
         if let Some(path) = &self.path {
             value["path"] = json!(path);
@@ -159,25 +159,25 @@ impl<W: Write> Write for StreamWriter<W> {
 /// Output paths remain relative to the release output, which may lie outside the source clone.
 pub fn execute(
     root: &Path,
-    spec: &chrono_harness::CommandSpec,
+    spec: &crate::observed::CommandSpec,
     output: &Path,
     index: usize,
     timeout: std::time::Duration,
     stdout: impl Write + Send,
     stderr: impl Write + Send,
 ) -> Result<CapturedProcess, String> {
-    let digest = chrono_harness::file_identity(Path::new(&spec.program))?.0;
+    let digest = crate::files::file_identity(Path::new(&spec.program))?.0;
     let mut stdout = StreamWriter::new(output, format!("processes/{index}.stdout"), stdout);
     let mut stderr = StreamWriter::new(output, format!("processes/{index}.stderr"), stderr);
     let started_ns = timestamp()?;
     let started = Instant::now();
-    let original = chrono_harness::run_process_observed_forwarded_for(
+    let original = crate::observed::run_process_observed_forwarded_for(
         root,
         spec,
         b"",
         &digest,
         timeout,
-        chrono_harness::ProcessForward {
+        crate::observed::ProcessForward {
             stdout: &mut stdout,
             stderr: &mut stderr,
         },

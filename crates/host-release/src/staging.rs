@@ -99,7 +99,7 @@ impl Staging {
             if transport::observe(root, &binding.source)? != binding.expected {
                 return Err(error("selected source changed before staging"));
             }
-            let source = chrono_harness::no_symlink_parents(root, &binding.source)?;
+            let source = crate::files::no_symlink_parents(root, &binding.source)?;
             copy_member(root, &source, &binding.destination, &binding.expected)?;
         }
         Ok(())
@@ -138,7 +138,7 @@ pub(crate) fn copy_member(
     relative: &str,
     expected: &ExecutableIdentity,
 ) -> Result<(), String> {
-    let destination = chrono_harness::prepare_publication(root, relative)?;
+    let destination = crate::files::prepare_publication(root, relative)?;
     let mut temporary = tempfile::NamedTempFile::new_in(
         destination
             .parent()
@@ -146,7 +146,7 @@ pub(crate) fn copy_member(
     )
     .map_err(error)?;
     let mut source = File::open(source).map_err(error)?;
-    let (sha256, size) = chrono_harness::copy_hashed(&mut source, temporary.as_file_mut())?;
+    let (sha256, size) = crate::files::copy_hashed(&mut source, temporary.as_file_mut())?;
     if !copied_member(&sha256, &expected.sha256, size, expected.size) {
         return Err(error("source bytes changed during staging"));
     }
@@ -155,7 +155,7 @@ pub(crate) fn copy_member(
         .as_file()
         .set_permissions(fs::Permissions::from_mode(expected.mode))
         .map_err(error)?;
-    chrono_harness::no_symlink_parents(root, relative)?;
+    crate::files::no_symlink_parents(root, relative)?;
     temporary.persist(destination).map_err(error)?;
     Ok(())
 }

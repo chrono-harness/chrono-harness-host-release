@@ -55,7 +55,7 @@ pub fn verify_workflow(
     environment: &Environment,
     commands: &mut impl crate::publication::Commands,
 ) -> Result<WorkflowIdentity, String> {
-    chrono_harness::relative_path(path).map_err(error)?;
+    crate::files::relative_path(path).map_err(error)?;
     if !path.starts_with(".github/workflows/") || !path.ends_with(".yml") {
         return Err(error("workflow path must be a declared GitHub workflow"));
     }
@@ -81,7 +81,7 @@ pub(crate) fn verify_workflow_commits(
     workflow_commit: &str,
     commands: &mut impl crate::publication::Commands,
 ) -> Result<WorkflowIdentity, String> {
-    chrono_harness::relative_path(path).map_err(error)?;
+    crate::files::relative_path(path).map_err(error)?;
     if !path.starts_with(".github/workflows/")
         || !path.ends_with(".yml")
         || !crate::verified_recipe::delivery::valid_release_oid(workflow_commit.as_bytes())

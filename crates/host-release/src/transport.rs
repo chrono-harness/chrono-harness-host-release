@@ -64,20 +64,20 @@ fn error(message: impl std::fmt::Display) -> String {
 
 /// 调用方提供自己的源码／clone 根与登记路径；不扫描或推断资产。
 pub fn observe(root: &Path, relative: &str) -> Result<ExecutableIdentity, String> {
-    let path = chrono_harness::no_symlink_parents(root, relative)?;
+    let path = crate::files::no_symlink_parents(root, relative)?;
     let metadata = fs::symlink_metadata(&path).map_err(error)?;
     let mode = metadata.permissions().mode() & 0o7777;
     if !policy::executable_file(metadata.is_file(), mode) {
         return Err(error(format!("not a regular executable: {relative}")));
     }
-    let (sha256, size) = chrono_harness::file_identity(&path)?;
+    let (sha256, size) = crate::files::file_identity(&path)?;
     Ok(ExecutableIdentity { sha256, size, mode })
 }
 
 /// archive 可以位于源码根外，必须不存在。失败的部分原件由发布单元保管。
 pub fn pack(root: &Path, relative: &str, archive: &Path) -> Result<PackedExecutable, String> {
     let executable = observe(root, relative)?;
-    let source = chrono_harness::no_symlink_parents(root, relative)?;
+    let source = crate::files::no_symlink_parents(root, relative)?;
     let mut input = File::open(source).map_err(error)?;
     let metadata = input.metadata().map_err(error)?;
     if !policy::executable_entry(
@@ -110,7 +110,7 @@ pub fn pack(root: &Path, relative: &str, archive: &Path) -> Result<PackedExecuta
     let mut output = builder.into_inner().map_err(error)?;
     output.flush().map_err(error)?;
     drop(output);
-    let (sha256, size) = chrono_harness::file_identity(archive)?;
+    let (sha256, size) = crate::files::file_identity(archive)?;
     Ok(PackedExecutable {
         executable,
         archive: ArchiveIdentity { sha256, size },
@@ -128,7 +128,7 @@ fn read_archive(
     if !fs::symlink_metadata(archive).map_err(error)?.is_file() {
         return Err(error("archive is not a regular file"));
     }
-    let (sha256, size) = chrono_harness::file_identity(archive)?;
+    let (sha256, size) = crate::files::file_identity(archive)?;
     if !policy::same_content(
         &sha256,
         size,
@@ -155,7 +155,7 @@ fn read_archive(
     {
         return Err(error("invalid executable archive member/path/mode"));
     }
-    let (sha256, size) = chrono_harness::copy_hashed(&mut entry, output)?;
+    let (sha256, size) = crate::files::copy_hashed(&mut entry, output)?;
     drop(entry);
     match entries.next() {
         Some(Err(failure)) => return Err(error(failure)),
@@ -191,7 +191,7 @@ pub fn import(
     root: &Path,
     relative: &str,
 ) -> Result<ExecutableIdentity, String> {
-    let destination = chrono_harness::prepare_publication(root, relative)?;
+    let destination = crate::files::prepare_publication(root, relative)?;
     let parent = destination
         .parent()
         .ok_or_else(|| error("missing destination parent"))?;
@@ -219,7 +219,7 @@ pub fn import(
     ) {
         return Err(error("transported executable identity mismatch"));
     }
-    chrono_harness::no_symlink_parents(root, relative)?;
+    crate::files::no_symlink_parents(root, relative)?;
     temporary.persist(destination).map_err(error)?;
     Ok(identity)
 }

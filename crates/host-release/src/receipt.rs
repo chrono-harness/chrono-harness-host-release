@@ -15,14 +15,14 @@ pub fn direct_compiler_binding(
 
 }
 #[cfg(not(verus_keep_ghost))]
+use crate::files::{file_identity, no_symlink_parents};
+#[cfg(not(verus_keep_ghost))]
 use crate::verified_recipe::delivery::valid_digest as digest;
 #[cfg(not(verus_keep_ghost))]
 use crate::{
     recipe::{Loaded, Scope, Unit},
     verified_recipe::{self as policy, DependencyResult},
 };
-#[cfg(not(verus_keep_ghost))]
-use chrono_harness::{file_identity, no_symlink_parents};
 #[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
 #[cfg(not(verus_keep_ghost))]
@@ -198,7 +198,7 @@ pub(crate) fn select_retained(
                 Some(loaded.recipe.native_frontends[platform].job.as_str()),
             )
         };
-    let input = chrono_harness::json(raw)?;
+    let input = crate::codec::json(raw)?;
     let rows = input
         .as_object()
         .ok_or_else(|| error("current dependency input must be an object"))?;
@@ -724,11 +724,11 @@ pub(crate) fn read_at(
         return Err(error("receipt is not a regular file"));
     }
     let bytes = fs::read(&receipt_path).map_err(error)?;
-    let sha256 = chrono_harness::sha256(&bytes);
+    let sha256 = crate::files::sha256(&bytes);
     if parent.kind == Kind::Local && selection.artifact_id != sha256 {
         return Err(error("selected local original receipt digest mismatch"));
     }
-    let receipt = chrono_harness::json(&bytes)?;
+    let receipt = crate::codec::json(&bytes)?;
     if receipt["schema"] != "chrono-release-unit/v1"
         || receipt["status"] != "passed"
         || receipt.get("failure") != Some(&Value::Null)

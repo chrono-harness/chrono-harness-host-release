@@ -21,13 +21,13 @@ impl<'a> Committed<'a> {
         tree: &str,
     ) -> Result<Self, String> {
         for oid in [commit, tree] {
-            chrono_harness::facts::full_oid(oid)?;
+            Self::validate_oid(oid)?;
         }
         let search = env
             .get(OsStr::new("PATH"))
             .map(|p| p.to_str().ok_or("non-UTF8 Git search path"))
             .transpose()?;
-        let git = chrono_harness::resolve_program(root, "git", search)?;
+        let git = crate::files::resolve_program(root, "git", search)?;
         let source = Self {
             root,
             env,
@@ -43,9 +43,21 @@ impl<'a> Committed<'a> {
     }
 
     fn run(&self, args: &[&str]) -> Result<Vec<u8>, String> {
-        let mut git = Command::new(&self.git);
+        let mut git = if let Some(descriptors) = std::env::var_os(crate::observed::DESCRIPTORS) {
+            let search = self.env.get(OsStr::new("PATH")).and_then(|v| v.to_str());
+            let owner = crate::files::resolve_program(self.root, "chrono-harness", search)?;
+            let mut command = Command::new(owner);
+            command.arg("exec-with-descriptors-v1").arg(&self.git);
+            command
+                .env_clear()
+                .env(crate::observed::DESCRIPTORS, descriptors);
+            command
+        } else {
+            let mut command = Command::new(&self.git);
+            command.env_clear();
+            command
+        };
         git.current_dir(self.root)
-            .env_clear()
             .envs(
                 ["PATH", "HOME", "XDG_CONFIG_HOME"]
                     .into_iter()
@@ -57,7 +69,6 @@ impl<'a> Committed<'a> {
                 "--literal-pathspecs",
             ])
             .args(args);
-        chrono_harness::process_fds::forward_command(&mut git, &[])?;
         let result = git.output().map_err(|e| e.to_string())?;
         if !result.status.success() {
             return Err(format!(
@@ -69,16 +80,27 @@ impl<'a> Committed<'a> {
         Ok(result.stdout)
     }
 
-    pub fn read(&self, path: &str) -> Result<Vec<u8>, String> {
-        chrono_harness::relative_path(path)?;
+    fn validate_oid(oid: &str) -> Result<(), String> {
+        if crate::verified_recipe::delivery::valid_release_oid(oid.as_bytes()) {
+            Ok(())
+        } else {
+            Err("expected full nonzero lowercase commit OID".into())
+        }
+    }
+    pub fn read_at(&self, treeish: &str, path: &str) -> Result<Vec<u8>, String> {
+        Self::validate_oid(treeish)?;
+        crate::files::relative_path(path)?;
         // A tree path can name a symlink or submodule. Git formats just its
         // mode here, so path quoting and whitespace cannot change the verdict.
-        let mode = self.run(&["ls-tree", "--format=%(objectmode)", &self.tree, "--", path])?;
+        let mode = self.run(&["ls-tree", "--format=%(objectmode)", treeish, "--", path])?;
         if !matches!(mode.as_slice(), b"100644\n" | b"100755\n") {
             return Err(format!(
                 "release input is not a regular file in the fixed tree: {path}"
             ));
         }
-        self.run(&["cat-file", "blob", &format!("{}:{path}", self.tree)])
+        self.run(&["cat-file", "blob", &format!("{treeish}:{path}")])
+    }
+    pub fn read(&self, path: &str) -> Result<Vec<u8>, String> {
+        self.read_at(&self.tree, path)
     }
 }

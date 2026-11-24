@@ -14,11 +14,11 @@ fn needs_prepare_binding(rust_required: bool, is_compiler: bool) -> (needed: boo
 }
 }
 #[cfg(not(verus_keep_ghost))]
+use crate::files::{no_symlink_parents, resolve_program};
+#[cfg(not(verus_keep_ghost))]
 use crate::registrations::{self, Method};
 #[cfg(not(verus_keep_ghost))]
 use crate::verified_recipe::{self as policy, Invocation};
-#[cfg(not(verus_keep_ghost))]
-use chrono_harness::{no_symlink_parents, resolve_program};
 #[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
 #[cfg(not(verus_keep_ghost))]
@@ -41,7 +41,7 @@ fn error(message: impl std::fmt::Display) -> String {
 #[cfg(not(verus_keep_ghost))]
 pub fn read_json(root: &Path, relative: &str) -> Result<Value, String> {
     let path = no_symlink_parents(root, relative)?;
-    chrono_harness::json(&fs::read(&path).map_err(|e| error(format!("{}: {e}", path.display())))?)
+    crate::codec::json(&fs::read(&path).map_err(|e| error(format!("{}: {e}", path.display())))?)
 }
 
 #[cfg(not(verus_keep_ghost))]
@@ -53,8 +53,8 @@ pub(crate) fn registration_view<T: serde::de::DeserializeOwned>(
 ) -> Result<T, String> {
     registrations::query(view, projects, |program, argument, input| {
         let executable = resolve_program(root, program, None)?;
-        let digest = chrono_harness::file_identity(&executable)?.0;
-        let spec = chrono_harness::CommandSpec {
+        let digest = crate::files::file_identity(&executable)?.0;
+        let spec = crate::observed::CommandSpec {
             program: executable
                 .to_str()
                 .ok_or("invalid registration executable path")?
@@ -62,9 +62,9 @@ pub(crate) fn registration_view<T: serde::de::DeserializeOwned>(
             args: vec![argument.to_owned()],
             env: BTreeMap::new(),
             timeout_seconds,
-            output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
+            output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
         };
-        let result = chrono_harness::run_process_observed(root, &spec, input, &digest)?;
+        let result = crate::observed::run_process_observed(root, &spec, input, &digest)?;
         if let Some(failure) = result.failure {
             return Err(failure);
         }
@@ -74,7 +74,8 @@ pub(crate) fn registration_view<T: serde::de::DeserializeOwned>(
 
 #[cfg(not(verus_keep_ghost))]
 pub fn overlaps(a: &str, b: &str) -> bool {
-    chrono_harness::units::overlap(a, b)
+    let (a, b) = (Path::new(a), Path::new(b));
+    a.starts_with(b) || b.starts_with(a)
 }
 
 #[cfg(not(verus_keep_ghost))]
