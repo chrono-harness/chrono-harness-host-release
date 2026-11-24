@@ -103,6 +103,60 @@ fn preview_reuse_binds_the_original_landing_base() {
 }
 
 // 同一预期在 Verus 中证明，在普通 Rust 中实际执行。
+#[cfg_attr(not(verus_keep_ghost), test)]
+fn roadmap_uses_only_public_releases_unassigned_open_issues_and_completed_milestones() {
+    use policy::roadmap::{milestone_state,published,unassigned_issue};
+    proof {
+        reveal_strlit(""); reveal_strlit("date"); reveal_strlit("open"); reveal_strlit("closed");
+        assert("closed"@.len() != "open"@.len());
+    }
+    expect_recipe(published(false,"date"));
+    expect_recipe(!published(true,"date"));
+    expect_recipe(!published(false,""));
+    expect_recipe(unassigned_issue(false,"open",false));
+    expect_recipe(!unassigned_issue(true,"open",false));
+    expect_recipe(!unassigned_issue(false,"open",true));
+    expect_recipe(!unassigned_issue(false,"closed",false));
+    expect_recipe(policy::same_text(milestone_state(true,0),"closed"));
+    expect_recipe(policy::same_text(milestone_state(true,1),"open"));
+    expect_recipe(policy::same_text(milestone_state(false,0),"open"));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
+fn roadmap_updates_only_its_own_original_issue_across_release_attempts() {
+    use policy::roadmap::{IssueAction,owns_failure,release_issue};
+    broadcast use vstd::array::group_array_axioms;
+    let prefix=[60u8,33]; let body=[60u8,33,32]; let other=[32u8,60,33];
+    proof {
+        assert(body@.take(2) =~= prefix@); assert(other@.take(2)[0] != prefix@[0]);
+        reveal_strlit("bot"); reveal_strlit("github-actions[bot]");
+        assert("bot"@.len() != "github-actions[bot]"@.len());
+    }
+    expect_recipe(owns_failure(false,"github-actions[bot]",&body,&prefix));
+    expect_recipe(!owns_failure(true,"github-actions[bot]",&body,&prefix));
+    expect_recipe(!owns_failure(false,"bot",&body,&prefix));
+    expect_recipe(!owns_failure(false,"github-actions[bot]",&other,&prefix));
+    let create=release_issue("completed","failure",None,"");
+    let close=release_issue("completed","success",Some("open"),"");
+    let reopen=release_issue("completed","timed_out",Some("closed"),"completed");
+    let dismissed=release_issue("completed","failure",Some("closed"),"not_planned");
+    let running=release_issue("in_progress","failure",None,"");
+    let duplicate=release_issue("completed","failure",Some("open"),"");
+    proof {
+        reveal_strlit("completed"); reveal_strlit("in_progress"); reveal_strlit("not_planned");
+        reveal_strlit("success"); reveal_strlit("failure"); reveal_strlit("timed_out");
+        reveal_strlit("open"); reveal_strlit("closed");
+        assert("failure"@[0] != "success"@[0]); assert("completed"@.len() != "in_progress"@.len());
+        assert("completed"@.len() != "not_planned"@.len()); assert("open"@.len() != "closed"@.len());
+    }
+    expect_recipe(matches!(create,IssueAction::Create));
+    expect_recipe(matches!(close,IssueAction::Close));
+    expect_recipe(matches!(reopen,IssueAction::Reopen));
+    expect_recipe(matches!(dismissed,IssueAction::None));
+    expect_recipe(matches!(running,IssueAction::None));
+    expect_recipe(matches!(duplicate,IssueAction::None));
+}
+
 fn expect_recipe(actual: bool)
     requires actual,
 {
