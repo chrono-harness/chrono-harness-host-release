@@ -684,3 +684,22 @@ fn receipt_job_run_and_attempt_must_match_the_selected_producer() {
 }
 
 }
+
+#[cfg(verus_keep_ghost)]
+verus! {
+fn workflow_reference_boundaries(repo: &[u8], path: &[u8], reference: &[u8], commit: &[u8])
+    requires repo.len() > 0, policy::delivery::release_oid(commit@),
+        policy::workflow_identity::segment(reference@, 0, repo@),
+        reference.len() > repo.len(), reference@[repo.len() as int] == 47,
+        policy::workflow_identity::segment(reference@, repo.len()+1, path@),
+        reference.len() >= repo.len()+path.len()+2, reference@[repo.len()+path.len()+1] == 64,
+{
+    let accepted = policy::workflow_identity::workflow_environment(repo, path, reference, commit, commit);
+    assert(accepted == (reference.len() > repo.len()+path.len()+2));
+    let empty: [u8; 0] = [];
+    let wrong_repository = policy::workflow_identity::workflow_environment(&empty, path, reference, commit, commit);
+    assert(!wrong_repository);
+    let bad_commit = policy::workflow_identity::workflow_environment(repo, path, reference, &empty, commit);
+    assert(!bad_commit);
+}
+}

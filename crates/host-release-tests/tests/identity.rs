@@ -570,3 +570,38 @@ fn platform_origins_reuse_only_the_earlier_successful_build_of_the_same_run() {
         assert!(submit(&changed).is_err(), "{path}");
     }
 }
+
+#[test]
+fn workflow_rejects_the_first_invalid_input_before_reading_a_git_blob() {
+    use chrono_host_release::identity::verify_workflow;
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+    let mut env = workflow_environment(WORKFLOW_COMMIT);
+    env.insert("GITHUB_WORKFLOW_REF".into(), OsString::from_vec(vec![0xff]));
+    let mut commands = WorkflowCommands::default();
+    for (path, expected) in [
+        (
+            "../x.yml",
+            "E_RELEASE_IDENTITY: invalid relative path: \"../x.yml\"",
+        ),
+        (
+            ".github/workflows/release.yaml",
+            "E_RELEASE_IDENTITY: workflow path must be a declared GitHub workflow",
+        ),
+        (
+            WORKFLOW,
+            "E_RELEASE_IDENTITY: non UTF-8 GITHUB_WORKFLOW_REF",
+        ),
+    ] {
+        assert_eq!(
+            verify_workflow(path, "bad-oid", &env, &mut commands).unwrap_err(),
+            expected
+        );
+        assert!(commands.calls.is_empty());
+    }
+    env.insert("GITHUB_WORKFLOW_REF".into(), "wrong/repository@v".into());
+    assert_eq!(
+        verify_workflow(WORKFLOW, "bad-oid", &env, &mut commands).unwrap_err(),
+        "E_RELEASE_IDENTITY: missing or mismatched GitHub workflow identity"
+    );
+    assert!(commands.calls.is_empty());
+}
