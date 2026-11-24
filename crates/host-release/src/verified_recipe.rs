@@ -40,6 +40,9 @@ pub mod roadmap;
 
 #[path = "verified_delivery.rs"]
 pub mod delivery;
+#[cfg(verus_keep_ghost)]
+#[path = "identity.rs"]
+pub mod workflow_identity;
 
 use vstd::contrib::exec_spec::ExecSpecEq;
 

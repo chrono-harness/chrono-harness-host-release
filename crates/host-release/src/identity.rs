@@ -1,10 +1,82 @@
 //! 同一次发布的版本、固定源码及原 CI 身份；不读取会漂移的分支。
-use crate::{execution::Environment, verified_recipe::delivery as policy};
+#[cfg(verus_keep_ghost)]
+use super::delivery as policy;
+#[cfg(not(verus_keep_ghost))]
+use crate::verified_recipe::delivery as policy;
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
+
+verus! {
+pub open spec fn segment(all: Seq<u8>, at: int, part: Seq<u8>) -> bool {
+    0 <= at && at + part.len() <= all.len()
+        && forall|i: int| 0 <= i < part.len() ==> all[at+i] == part[i]
+}
+
+fn matches_at(all: &[u8], at: usize, part: &[u8]) -> (ok: bool)
+    ensures ok == segment(all@, at as int, part@),
+{
+    if at > all.len() || part.len() > all.len() - at { return false; }
+    let mut i = 0usize;
+    while i < part.len()
+        invariant
+            i <= part.len(), at <= all.len(), part.len() <= all.len()-at,
+            forall|j: int| 0 <= j < i ==> all@[at as int+j] == part@[j],
+        decreases part.len()-i,
+    {
+        if all[at+i] != part[i] { return false; }
+        i += 1;
+    }
+    true
+}
+
+pub fn workflow_path(path: &[u8]) -> (ok: bool)
+    ensures ok == (segment(path@, 0, ".github/workflows/".spec_bytes())
+        && segment(path@, path.len() - ".yml".spec_bytes().len(), ".yml".spec_bytes())),
+{
+    let suffix = ".yml".as_bytes();
+    path.len() >= suffix.len() && matches_at(path, 0, ".github/workflows/".as_bytes())
+        && matches_at(path, path.len()-suffix.len(), suffix)
+}
+
+pub fn fixed_revisions(workflow: &[u8], source: &[u8]) -> (ok: bool)
+    ensures ok == (policy::release_oid(workflow@) && policy::release_oid(source@)),
+{
+    policy::valid_release_oid(workflow) && policy::valid_release_oid(source)
+}
+
+/// GitHub supplies repository/path@ref. The ref must have a nonempty suffix.
+pub fn workflow_environment(repo: &[u8], path: &[u8], reference: &[u8], workflow: &[u8], source: &[u8]) -> (ok: bool)
+    ensures ok == (repo.len() > 0 && policy::release_oid(workflow@) && policy::release_oid(source@)
+        && segment(reference@, 0, repo@) && reference.len() > repo.len()
+        && reference@[repo.len() as int] == 47
+        && segment(reference@, repo.len()+1, path@)
+        && reference.len() > repo.len()+path.len()+2
+        && reference@[repo.len()+path.len()+1] == 64),
+{
+    if repo.len() == 0 || !fixed_revisions(workflow, source)
+        || !matches_at(reference, 0, repo) || reference.len() <= repo.len()
+        || reference[repo.len()] != 47 { return false; }
+    let start = repo.len()+1;
+    if !matches_at(reference, start, path) { return false; }
+    let end = start+path.len();
+    reference.len()-end > 1 && reference[end] == 64
+}
+}
+
+#[cfg(not(verus_keep_ghost))]
+use crate::execution::Environment;
+#[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
+#[cfg(not(verus_keep_ghost))]
 use std::ffi::OsStr;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[cfg(not(verus_keep_ghost))]
 pub enum Channel {
     Build,
     Preview,
@@ -13,6 +85,7 @@ pub enum Channel {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(not(verus_keep_ghost))]
 pub struct VerifiedCi {
     pub run_id: u64,
     pub attempt: u64,
@@ -20,6 +93,7 @@ pub struct VerifiedCi {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(not(verus_keep_ghost))]
 pub struct Identity {
     pub channel: Channel,
     pub version: String,
@@ -30,6 +104,7 @@ pub struct Identity {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg(not(verus_keep_ghost))]
 pub struct WorkflowIdentity {
     pub path: String,
     pub workflow_commit: String,
@@ -37,10 +112,12 @@ pub struct WorkflowIdentity {
     pub blob: String,
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn error(message: impl std::fmt::Display) -> String {
     format!("E_RELEASE_IDENTITY: {message}")
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn text<'a>(environment: &'a Environment, name: &str) -> Result<&'a str, String> {
     environment
         .get(OsStr::new(name))
@@ -49,6 +126,7 @@ fn text<'a>(environment: &'a Environment, name: &str) -> Result<&'a str, String>
 }
 
 /// GitHub 的工作流修订可以前移；只有同一路径的完整字节相同才可消费本候选。
+#[cfg(not(verus_keep_ghost))]
 pub fn verify_workflow(
     path: &str,
     source_commit: &str,
@@ -56,25 +134,26 @@ pub fn verify_workflow(
     commands: &mut impl crate::publication::Commands,
 ) -> Result<WorkflowIdentity, String> {
     crate::files::relative_path(path).map_err(error)?;
-    if !path.starts_with(".github/workflows/") || !path.ends_with(".yml") {
+    if !workflow_path(path.as_bytes()) {
         return Err(error("workflow path must be a declared GitHub workflow"));
     }
     let repository = text(environment, "GITHUB_REPOSITORY")?;
     let workflow_commit = text(environment, "GITHUB_WORKFLOW_SHA")?;
     let workflow_ref = text(environment, "GITHUB_WORKFLOW_REF")?;
-    if repository.is_empty()
-        || !crate::verified_recipe::delivery::valid_release_oid(workflow_commit.as_bytes())
-        || !crate::verified_recipe::delivery::valid_release_oid(source_commit.as_bytes())
-        || !workflow_ref
-            .strip_prefix(&format!("{repository}/{path}@"))
-            .is_some_and(|reference| !reference.is_empty())
-    {
+    if !workflow_environment(
+        repository.as_bytes(),
+        path.as_bytes(),
+        workflow_ref.as_bytes(),
+        workflow_commit.as_bytes(),
+        source_commit.as_bytes(),
+    ) {
         return Err(error("missing or mismatched GitHub workflow identity"));
     }
     verify_workflow_commits(path, source_commit, workflow_commit, commands)
 }
 
 /// 只读核对由 GitHub 原运行 API 取得的工作流提交与固定候选。
+#[cfg(not(verus_keep_ghost))]
 pub(crate) fn verify_workflow_commits(
     path: &str,
     source_commit: &str,
@@ -82,10 +161,8 @@ pub(crate) fn verify_workflow_commits(
     commands: &mut impl crate::publication::Commands,
 ) -> Result<WorkflowIdentity, String> {
     crate::files::relative_path(path).map_err(error)?;
-    if !path.starts_with(".github/workflows/")
-        || !path.ends_with(".yml")
-        || !crate::verified_recipe::delivery::valid_release_oid(workflow_commit.as_bytes())
-        || !crate::verified_recipe::delivery::valid_release_oid(source_commit.as_bytes())
+    if !workflow_path(path.as_bytes())
+        || !fixed_revisions(workflow_commit.as_bytes(), source_commit.as_bytes())
     {
         return Err(error("invalid fixed workflow identity"));
     }
@@ -134,6 +211,7 @@ pub(crate) fn verify_workflow_commits(
     })
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn positive(environment: &Environment, name: &str) -> Result<u64, String> {
     let value = text(environment, name)?;
     if !policy::decimal_text(value.as_bytes(), false) {
@@ -142,6 +220,7 @@ fn positive(environment: &Environment, name: &str) -> Result<u64, String> {
     value.parse().map_err(error)
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn core(version: &str) -> Result<&str, String> {
     let core = version.split('-').next().unwrap_or("");
     let numbers: Vec<_> = core.strip_prefix('v').unwrap_or("").split('.').collect();
@@ -153,6 +232,7 @@ fn core(version: &str) -> Result<&str, String> {
     Ok(core)
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn resolve(
     planned_version: &str,
     source_commit: &str,
