@@ -187,3 +187,87 @@ fn roadmap_queries_use_github_objects_and_return_the_owned_issue_number() {
     );
     assert!(output.is_empty());
 }
+
+#[test]
+fn installation_is_bound_to_this_launchers_entire_stdout_and_the_installed_bytes() {
+    use chrono_host_release::{
+        delivery::verify_installation_stdout,
+        identity::{Channel, Identity},
+    };
+    use sha2::{Digest, Sha256};
+    use std::{collections::BTreeSet, os::unix::fs::PermissionsExt};
+    let dir = tempfile::tempdir().unwrap();
+    let host = dir.path();
+    let rel = ".chrono-harness/bin/tool";
+    let file = host.join(rel);
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, b"tool").unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+    let hash = format!("{:x}", Sha256::digest(b"tool"));
+    let members = BTreeSet::from(["tool".to_string()]);
+    let tools = json!({"tool":{"sha256":hash,"size":4}});
+    let identity = Identity {
+        channel: Channel::Build,
+        version: "v1.2.3".into(),
+        source_commit: "a".repeat(40),
+        source_tree: "b".repeat(40),
+        verified_ci: None,
+    };
+    let adopted = json!({"version":identity.version,"lock":".chrono-harness/distribution.json","bootstrap":".chrono-harness/install.sh"});
+    let report = json!({"schema":"chrono-install-result/v1","version":identity.version,"source_commit":identity.source_commit,"source_tree":identity.source_tree,"platform":"macos-aarch64","installed":[{"name":"tool","size":4,"sha256":hash,"path":rel}]});
+    let verify = |channel, input: &str| {
+        verify_installation_stdout(
+            input.as_bytes(),
+            host,
+            &Identity {
+                channel,
+                ..identity.clone()
+            },
+            "macos-aarch64",
+            &members,
+            tools.as_object().unwrap(),
+        )
+    };
+    let one = report.to_string();
+    let both = format!("{adopted}\n{report}\n");
+    assert_eq!(verify(Channel::Build, &one).unwrap(), report);
+    assert_eq!(verify(Channel::Preview, &both).unwrap(), report);
+    assert_eq!(verify(Channel::Stable, &both).unwrap(), report);
+    fs::create_dir_all(host.join(".chrono-harness/state")).unwrap();
+    fs::write(host.join(".chrono-harness/state/distribution.json"), &one).unwrap();
+    for (channel, input) in [
+        (Channel::Build, "".into()),
+        (Channel::Build, both.clone()),
+        (Channel::Stable, one.clone()),
+        (Channel::Stable, format!("{report}\n{adopted}")),
+        (Channel::Preview, both.clone() + "extra"),
+        (Channel::Preview, format!("{{}}\n{report}")),
+        (Channel::Build, format!("{{\"schema\":null,{}", &one[1..])),
+    ] {
+        assert!(verify(channel, &input).is_err(), "{input}");
+    }
+    for (field, other) in [
+        ("/schema", json!("unknown")),
+        ("/version", json!("v2.0.0")),
+        ("/source_commit", json!("c".repeat(40))),
+        ("/source_tree", json!("d".repeat(40))),
+        ("/platform", json!("other")),
+        ("/installed/0/path", json!("elsewhere")),
+        ("/installed/0/sha256", json!("f".repeat(64))),
+        ("/installed/0/size", json!(0)),
+        ("/installed/0/name", json!("different")),
+        ("/installed", json!([])),
+    ] {
+        let mut changed = report.clone();
+        *changed.pointer_mut(field).unwrap() = other;
+        assert!(
+            verify(Channel::Build, &changed.to_string()).is_err(),
+            "{field}"
+        );
+    }
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(verify(Channel::Preview, &both).is_err());
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(&file, b"changed").unwrap();
+    assert!(verify(Channel::Build, &one).is_err());
+}

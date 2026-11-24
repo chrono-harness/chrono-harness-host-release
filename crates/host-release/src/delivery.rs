@@ -743,6 +743,22 @@ pub(crate) fn verify_publication_processes(
     Ok(())
 }
 
+#[cfg(not(verus_keep_ghost))]
+fn adoption_result(bytes: &[u8], version: &str) -> Result<(), String> {
+    let adopted = crate::codec::json(bytes)?;
+    if !crate::verified_recipe::delivery::text_fields(&[
+        (adopted["version"].as_str(), version),
+        (
+            adopted["lock"].as_str(),
+            ".chrono-harness/distribution.json",
+        ),
+        (adopted["bootstrap"].as_str(), ".chrono-harness/install.sh"),
+    ]) {
+        return Err(error("actual adoption result differs"));
+    }
+    Ok(())
+}
+
 /// 安装使用原发布产物；命令边界在测试中模拟，安装结果由实际安装器产生。
 #[cfg(not(verus_keep_ghost))]
 pub fn install_release(
@@ -821,11 +837,12 @@ pub fn install_release(
         for name in members {
             args.extend(["--tool".into(), name.clone()]);
         }
-        checked(
+        let adopted = checked(
             commands,
             program.to_str().ok_or("invalid installer path")?,
             &args,
         )?;
+        adoption_result(&adopted, &identity.version)?;
     }
     let launcher = if identity.channel == identity::Channel::Build {
         host.join(".chrono-harness/install.sh")
@@ -858,7 +875,7 @@ pub fn install_release(
         )?;
         downloaded
     };
-    checked(
+    let stdout = checked(
         commands,
         shell,
         &[
@@ -867,16 +884,43 @@ pub fn install_release(
             host.to_str().ok_or("invalid install host")?.into(),
         ],
     )?;
-    let installed = recipe::read_json(host, ".chrono-harness/state/distribution.json")?;
+    verify_installation_stdout(&stdout, host, identity, platform, members, tools)
+}
+
+/// A public launcher reports adoption and installation. An adopted launcher reports installation alone.
+#[cfg(not(verus_keep_ghost))]
+pub fn verify_installation_stdout(
+    stdout: &[u8],
+    host: &Path,
+    identity: &identity::Identity,
+    platform: &str,
+    members: &BTreeSet<String>,
+    tools: &serde_json::Map<String, Value>,
+) -> Result<Value, String> {
+    use crate::verified_recipe::delivery::{number_fields, text_fields};
+    let mut lines = stdout
+        .split(|b| *b == b'\n')
+        .filter(|line| !line.iter().all(u8::is_ascii_whitespace));
+    if identity.channel != identity::Channel::Build {
+        adoption_result(
+            lines.next().ok_or("missing adoption stdout")?,
+            &identity.version,
+        )?;
+    }
+    let installed = crate::codec::json(lines.next().ok_or("missing installation stdout")?)?;
+    if lines.next().is_some() {
+        return Err(error("unexpected output after installation result"));
+    }
     let rows = installed["installed"]
         .as_array()
         .ok_or("missing installed members")?;
-    if installed["schema"] != "chrono-install-result/v1"
-        || installed["version"] != identity.version
-        || installed["source_commit"] != identity.source_commit
-        || installed["source_tree"] != identity.source_tree
-        || installed["platform"] != platform
-        || rows.len() != members.len()
+    if !text_fields(&[
+        (installed["schema"].as_str(), "chrono-install-result/v1"),
+        (installed["version"].as_str(), &identity.version),
+        (installed["source_commit"].as_str(), &identity.source_commit),
+        (installed["source_tree"].as_str(), &identity.source_tree),
+        (installed["platform"].as_str(), platform),
+    ]) || rows.len() != members.len()
         || rows
             .iter()
             .filter_map(|row| row["name"].as_str())
@@ -890,11 +934,12 @@ pub fn install_release(
         let path = format!(".chrono-harness/bin/{name}");
         let actual = no_symlink_parents(host, &path)?;
         let (sha, size) = file_identity(&actual)?;
-        if row["path"] != path
-            || row["sha256"] != sha
-            || row["size"] != size
-            || tools[name]["sha256"] != sha
-            || tools[name]["size"] != size
+        let asset = tools.get(name).ok_or("missing installation asset")?;
+        if !text_fields(&[
+            (row["path"].as_str(), &path),
+            (row["sha256"].as_str(), &sha),
+            (asset["sha256"].as_str(), &sha),
+        ]) || !number_fields(&[(row["size"].as_u64(), size), (asset["size"].as_u64(), size)])
             || fs::metadata(actual).map_err(error)?.permissions().mode() & 0o111 == 0
         {
             return Err(error(format!("installed member differs: {name}")));
