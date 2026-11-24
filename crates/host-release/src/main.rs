@@ -29,6 +29,11 @@ fn run() -> Result<i32, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     match args.as_slice() {
+        [command] if command == "template-binary-origins-v1" => {
+            let origins = chrono_host_release::template_run::binary_origins(std::io::stdin().lock())?;
+            println!("{}", origins);
+            Ok(0)
+        },
         [command] if command == "template-acceptance-v1" => {
             chrono_host_release::template_run::acceptance(std::io::stdin().lock())?;
             Ok(0)
