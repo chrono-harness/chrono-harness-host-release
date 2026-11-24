@@ -207,3 +207,96 @@ pub fn latest_stable(input: impl Read) -> Result<Option<String>, String> {
         .collect();
     Ok(version_order::latest_stable(&keys).map(|index| rows[index].tag_name.clone()))
 }
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
+enum ConsumerPin {
+    Copier {
+        repository: String,
+        version: String,
+        rolling: bool,
+        answers: Value,
+    },
+    Binary {
+        repository: String,
+        version: String,
+        binary: String,
+        tool: Value,
+    },
+}
+
+fn check_pin_version(value: &str, planned: &str, rolling: bool) -> Result<(), String> {
+    let (core, serial) = match value.split_once("-alpha.") {
+        Some((core, serial)) => (core, Some(serial)),
+        None => (value, None),
+    };
+    let parts: Vec<_> = core.split('.').collect();
+    if crate::verified_recipe::delivery::consumer_series(rolling, core, &parts, planned, serial) {
+        Ok(())
+    } else {
+        Err("consumer has not adopted this preview series".into())
+    }
+}
+
+pub fn consumer_pin(input: impl Read) -> Result<Value, String> {
+    use crate::verified_recipe::delivery::{installed_download, text_fields};
+    match read(input)? {
+        ConsumerPin::Copier {
+            repository,
+            version,
+            rolling,
+            answers,
+        } => {
+            let source = answers["_src_path"].as_str();
+            let urls = [
+                format!("gh:{repository}"),
+                format!("https://github.com/{repository}"),
+                format!("https://github.com/{repository}.git"),
+            ];
+            if !urls.iter().any(|url| text_fields(&[(source, url)])) {
+                return Err("consumer uses another template".into());
+            }
+            let tag = answers["_commit"].as_str().ok_or("missing template tag")?;
+            check_pin_version(
+                tag.strip_prefix('v').ok_or("expected a v-prefixed tag")?,
+                &version,
+                rolling,
+            )?;
+            Ok(serde_json::json!([tag, null]))
+        }
+        ConsumerPin::Binary {
+            repository,
+            version,
+            binary,
+            tool,
+        } => {
+            let pin = tool["version"].as_str().ok_or("missing binary version")?;
+            check_pin_version(pin, &version, false)?;
+            if !text_fields(&[(tool["bin"].as_str(), &binary)]) {
+                return Err("wrong installed executable".into());
+            }
+            let mut checksums = std::collections::BTreeMap::new();
+            for (platform, suffix) in [
+                ("linux-x64", "linux-x86_64"),
+                ("macos-arm64", "macos-aarch64"),
+            ] {
+                let asset = format!("{binary}-{suffix}");
+                let expected =
+                    format!("https://github.com/{repository}/releases/download/v{pin}/{asset}");
+                let platform = &tool["platforms"][platform];
+                let checksum = platform["checksum"]
+                    .as_str()
+                    .ok_or("missing platform checksum")?;
+                if !installed_download(
+                    platform["url"].as_str(),
+                    &expected,
+                    checksum.strip_prefix("sha256:"),
+                ) {
+                    return Err(format!("consumer URL or checksum differs for {asset}"));
+                }
+                checksums.insert(asset, checksum);
+            }
+            Ok(serde_json::json!([format!("v{pin}"), checksums]))
+        }
+    }
+}

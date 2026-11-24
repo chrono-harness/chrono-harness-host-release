@@ -43,6 +43,11 @@ fn run() -> Result<i32, String> {
             println!("{}", serde_json::to_string(&version).map_err(|e| e.to_string())?);
             Ok(0)
         },
+        [command] if command == "template-consumer-pin-v1" => {
+            let pin = chrono_host_release::template_run::consumer_pin(std::io::stdin().lock())?;
+            println!("{}", pin);
+            Ok(0)
+        },
         [command] if command == "template-release-v1" => {
             chrono_host_release::template_run::release(std::io::stdin().lock())?;
             Ok(0)
@@ -88,7 +93,7 @@ fn run() -> Result<i32, String> {
             frontend::export(Path::new(root), Path::new(output), &std::env::vars_os().collect())?;
             Ok(0)
         },
-        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]\n       chrono-host-release roadmap-v1 | template-run-v1 | template-acceptance-v1 | template-next-version-v1 | template-release-v1".into()),
+        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]\n       chrono-host-release roadmap-v1 | template-run-v1 | template-acceptance-v1 | template-next-version-v1 | template-release-v1 | template-consumer-pin-v1".into()),
     }
 }
 

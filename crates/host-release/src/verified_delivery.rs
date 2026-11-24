@@ -309,6 +309,27 @@ pub fn version_numbers(parts: &[&str]) -> (valid: bool)
     true
 }
 
+/// The caller decodes an optional "-alpha." suffix; release serials are positive canonical decimals.
+pub fn consumer_series(rolling: bool, core: &str, parts: &[&str], planned: &str, serial: Option<&str>) -> (valid: bool)
+    ensures valid == ((parts.len() == 3 && forall|i: int| 0 <= i < parts.len() ==> decimal(parts@[i].spec_bytes(), true))
+        && (rolling || core@ == planned@)
+        && match serial { Some(value) => decimal(value.spec_bytes(), false), None => rolling }),
+{
+    version_numbers(parts) && (rolling || same_text(core, planned))
+        && match serial { Some(value) => decimal_text(value.as_bytes(), false), None => rolling }
+}
+
+pub fn installed_download(url: Option<&str>, expected: &str, sha256: Option<&str>) -> (valid: bool)
+    ensures valid == (text_pair((url, expected)) && match sha256 {
+        None => false,
+        Some(value) => value.spec_bytes().len() == 64 && lower_hex(value.spec_bytes()),
+    }),
+{
+    text_fields(&[(url, expected)]) && match sha256 {
+        Some(value) => valid_digest(value), None => false,
+    }
+}
+
 /// channel 的数字仅为适配器对既有枚举的无状态投影；3 表示拒绝。
 pub fn channel(text: &str) -> (out: u8)
     ensures out == if text@ == ""@ || text@ == "build"@ { 0u8 }
