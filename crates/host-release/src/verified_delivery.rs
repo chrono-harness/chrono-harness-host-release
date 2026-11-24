@@ -181,6 +181,50 @@ pub fn valid_digest(text: &str) -> (valid: bool)
     bytes.len() == 64 && hex_content(bytes).is_some()
 }
 
+pub type ExpectedAsset<'a> = (&'a str, Option<&'a str>);
+pub type ObservedAsset<'a> = (Option<&'a str>, Option<&'a str>, Option<&'a str>);
+
+pub open spec fn matching_asset(expected: ExpectedAsset, actual: ObservedAsset) -> bool {
+    text_pair((actual.0, expected.0)) && text_pair((actual.1, "uploaded"))
+    && match actual.2 {
+        None => false,
+        Some(digest) => digest.spec_bytes().len() == 64 && lower_hex(digest.spec_bytes())
+            && match expected.1 {
+                Some(pin) => digest@ == pin@,
+                None => expected.0@ == "SHA256SUMS"@,
+            },
+    }
+}
+
+/// A missing consumer pin is meaningful only for the checksums file itself.
+pub fn uploaded_asset(expected: ExpectedAsset, actual: ObservedAsset) -> (valid: bool)
+    ensures valid == matching_asset(expected, actual),
+{
+    if !text_fields(&[(actual.0, expected.0), (actual.1, "uploaded")]) { return false; }
+    match actual.2 {
+        None => false,
+        Some(digest) => valid_digest(digest) && match expected.1 {
+            Some(pin) => same_text(digest, pin),
+            None => same_text(expected.0, "SHA256SUMS"),
+        },
+    }
+}
+
+/// The decoder sorts both lists by asset name and preserves every GitHub row.
+pub fn release_assets(expected: &[ExpectedAsset], actual: &[ObservedAsset]) -> (valid: bool)
+    ensures valid == (expected.len() == actual.len() && forall|i: int| 0 <= i < expected.len()
+        ==> matching_asset(expected@[i], actual@[i])),
+{
+    if expected.len() != actual.len() { return false; }
+    for i in 0..expected.len()
+        invariant expected.len() == actual.len(),
+            forall|j: int| 0 <= j < i ==> matching_asset(expected@[j], actual@[j]),
+    {
+        if !uploaded_asset(expected[i], actual[i]) { return false; }
+    }
+    true
+}
+
 /// 只接受显式原运行支持的两个触发事件与完整工作流 head。
 pub fn promotion_run(numbers: &[(Option<u64>, u64)], texts: &[(Option<&str>, &str)], event: Option<&str>, head: Option<&[u8]>) -> (valid: bool)
     ensures valid == (

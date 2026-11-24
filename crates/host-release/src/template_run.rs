@@ -128,3 +128,50 @@ pub fn next_version(input: impl Read) -> Result<String, String> {
     let (prefix, _) = version.rsplit_once('.').ok_or("invalid release version")?;
     Ok(format!("{prefix}.{patch}"))
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Release {
+    tag: String,
+    draft: bool,
+    prerelease: bool,
+    assets: std::collections::BTreeMap<String, Option<String>>,
+    release: Value,
+}
+
+pub fn release(input: impl Read) -> Result<(), String> {
+    use crate::verified_recipe::delivery::{boolean_fields, release_assets, text_fields};
+    let request: Release = read(input)?;
+    let release = request.release;
+    if !text_fields(&[(release["tag_name"].as_str(), &request.tag)])
+        || !boolean_fields(&[
+            (release["draft"].as_bool(), request.draft),
+            (release["prerelease"].as_bool(), request.prerelease),
+        ])
+    {
+        return Err("unexpected release tag, draft or prerelease status".into());
+    }
+    let mut actual: Vec<_> = release["assets"]
+        .as_array()
+        .ok_or("missing release assets array")?
+        .iter()
+        .map(crate::publication::observed_asset)
+        .collect();
+    actual.sort_unstable_by_key(|row| row.0);
+    let expected = request
+        .assets
+        .iter()
+        .map(|(name, pin)| {
+            let digest = pin
+                .as_deref()
+                .map(|s| s.strip_prefix("sha256:").ok_or("expected a sha256 pin"))
+                .transpose()?;
+            Ok((name.as_str(), digest))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    if release_assets(&expected, &actual) {
+        Ok(())
+    } else {
+        Err("release assets differ in names, upload state or checksums".into())
+    }
+}
