@@ -48,6 +48,11 @@ fn run() -> Result<i32, String> {
             println!("{}", pin);
             Ok(0)
         },
+        [command] if command == "template-publication-v1" => {
+            let action = chrono_host_release::template_run::publication(std::io::stdin().lock())?;
+            println!("{}", action);
+            Ok(0)
+        },
         [command] if command == "template-release-v1" => {
             chrono_host_release::template_run::release(std::io::stdin().lock())?;
             Ok(0)

@@ -395,6 +395,45 @@ pub fn positive(value: Option<u64>) -> (valid: bool)
     match value { Some(value) => value > 0, None => false }
 }
 
+/// 0 = absent, 1 = same direct commit, 2 = conflicting or malformed reference.
+pub fn selected_ref(present: bool, reference: Option<&str>, expected_ref: &str,
+    kind: Option<&str>, oid: Option<&str>, source: &str) -> (status: u8)
+    ensures status == (if !release_oid(source.spec_bytes()) { 2u8 }
+        else if !present { 0u8 }
+        else if text_pair((reference, expected_ref)) && text_pair((kind, "commit")) && text_pair((oid, source)) { 1u8 }
+        else { 2u8 }),
+{
+    if !valid_release_oid(source.as_bytes()) { return 2; }
+    if !present { return 0; }
+    if text_fields(&[(reference, expected_ref), (kind, "commit"), (oid, source)]) { 1 } else { 2 }
+}
+
+/// Missing tags can be created for a new release or a draft explicitly targeting this source.
+pub fn publication_state(has_release: bool, reference: u8, draft: Option<bool>, target: Option<&str>,
+    source: &str, missing: usize) -> (action: u8)
+    ensures action == (if reference >= 2 { 3u8 }
+        else if !has_release { 0u8 }
+        else if draft == Some(true) && (reference == 1 || text_pair((target, source))) { 1u8 }
+        else if draft == Some(false) && reference == 1 && missing == 0 { 2u8 }
+        else { 3u8 }),
+{
+    if reference >= 2 { return 3; }
+    if !has_release { return 0; }
+    match draft_state(draft, missing) {
+        1 if reference == 1 || text_fields(&[(target, source)]) => 1,
+        0 if reference == 1 => 2,
+        _ => 3,
+    }
+}
+
+pub fn checksum_lines(expected: &[&str], observed: &[&str]) -> (valid: bool)
+    ensures valid == (expected.len() == 2 && observed.len() == 2
+        && expected@[0]@ == observed@[0]@ && expected@[1]@ == observed@[1]@),
+{
+    expected.len() == 2 && observed.len() == 2
+        && same_text(expected[0], observed[0]) && same_text(expected[1], observed[1])
+}
+
 pub fn draft_state(draft: Option<bool>, missing: usize) -> (action: u8)
     ensures action == match draft {
         Some(true) => 1u8,
