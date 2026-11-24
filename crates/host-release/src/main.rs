@@ -37,6 +37,7 @@ fn run() -> Result<i32, String> {
             chrono_host_release::template_run::check(std::io::stdin().lock())?;
             Ok(0)
         },
+        [command] if command == "roadmap-v1" => chrono_host_release::verified_recipe::roadmap::run(std::io::stdin().lock(), std::io::stdout().lock()),
         [root, output, flag, config, collection] if select_preview_command(flag) => delivery::select_preview(
             Path::new(root), Path::new(output), config, collection, &std::env::vars_os().collect(),
         ),
@@ -73,7 +74,7 @@ fn run() -> Result<i32, String> {
             frontend::export(Path::new(root), Path::new(output), &std::env::vars_os().collect())?;
             Ok(0)
         },
-        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]".into()),
+        _ => Err("usage: chrono-host-release roadmap-v1 | chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]".into()),
     }
 }
 
