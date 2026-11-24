@@ -131,3 +131,59 @@ fn release_reads_only_a_regular_file_from_the_requested_git_tree() {
         }
     }
 }
+
+#[test]
+fn roadmap_queries_use_github_objects_and_return_the_owned_issue_number() {
+    use chrono_host_release::verified_recipe::roadmap::run;
+    let query = |request: Value| -> Value {
+        let mut output = Vec::new();
+        assert_eq!(
+            run(
+                serde_json::to_vec(&request).unwrap().as_slice(),
+                &mut output
+            )
+            .unwrap(),
+            0
+        );
+        serde_json::from_slice(&output).unwrap()
+    };
+    let marker = "<!-- chrono-harness release-run 123 -->";
+    let bot = json!({"login":"github-actions[bot]"});
+    let history = json!([
+        {"number":1,"state":"open","user":{"login":"reporter"},"body":marker},
+        {"number":2,"state":"open","user":bot,"body":marker,"pull_request":{}},
+        {"number":3,"state":"open","user":bot,"body":"<!-- chrono-harness release-run 1230 -->"},
+        {"number":4,"state":"open","user":bot,"body":format!("{marker}\n\noriginal run")}
+    ]);
+    assert_eq!(
+        query(
+            json!({"operation":"release-issue","status":"completed","conclusion":"success","run_id":123,"issues":history})
+        ),
+        json!({"action":"close","issue":4})
+    );
+    assert_eq!(
+        query(json!({"operation":"release-run","status":"in_progress","conclusion":null})),
+        json!(false)
+    );
+    assert_eq!(
+        query(
+            json!({"operation":"published","releases":[{"draft":false,"published_at":null},{"draft":true,"published_at":"time"},{"draft":false,"published_at":"time"}]})
+        ),
+        json!([2])
+    );
+    assert_eq!(
+        query(
+            json!({"operation":"unassigned","issues":[{"number":5,"state":"open","milestone":null,"author_association":"MEMBER"},{"number":6,"state":"open","milestone":{"number":1}}]})
+        ),
+        json!([5])
+    );
+    let mut output = Vec::new();
+    assert!(
+        run(
+            br#"{"operation":"milestone","final_release":true,"open_issues":-1}"#.as_slice(),
+            &mut output
+        )
+        .is_err()
+    );
+    assert!(output.is_empty());
+}

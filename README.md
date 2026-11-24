@@ -20,3 +20,15 @@
 - `template-acceptance-v1` 接受 `sha`、`required_jobs`、`step` 与 GitHub 指定 run/attempt 返回的 `jobs` 数组。每个要求的作业都要在该提交成功，且至少有一次指定步骤成功。调用方负责从指定运行及尝试读取这些原件。
 
 `template-next-version-v1` 接受一个 JSON 对象，例如 `{"floor":"0.1.2","latest":"0.1.11"}`，返回 JSON 字符串 `"0.1.12"`。首次发布传 `latest: null`。后续版本取计划下限与上一正式版本的下一补丁版中较大的版本。三个十进制分量允许任意位数并使用规范 SemVer 拼写。
+
+可选的 GitHub issue-roadmap 工作流用 `chrono-host-release roadmap-v1` 判定哪些 GitHub 对象需要更新。标准输入和输出各为一个 JSON 值。无效输入退出 2，调用方应停止写入。工作流自行分页读取 GitHub 原件并按返回结果调用原 API。
+
+| 输入中的 `operation` | 其余输入 | 输出 |
+| --- | --- | --- |
+| `published` | `releases` 数组，每项含 `draft` 和 `published_at` | 已发布且有时间的条目的零基下标 |
+| `unassigned` | `issues` 数组，取 GitHub 的 `number/state/pull_request/milestone` | 可分配的 open issue 号码 |
+| `milestone` | `final_release` 布尔值、`open_issues` 非负整数 | `"closed"` 或 `"open"` |
+| `release-run` | 工作流的 `status/conclusion` | 是否需要查询该次运行的历史事项 |
+| `release-issue` | `status/conclusion/run_id` 和带 release-failure 标签的 `issues` 原件 | `{"action":"none/close/reopen/create","issue":号码或null}` |
+
+发布重试沿用同一个 run ID。恢复只关闭该运行由 github-actions[bot] 创建、正文以运行标记开始的 open issue。再次失败可以重开同一事项；用户以 `not_planned` 关闭的事项会保留原状。

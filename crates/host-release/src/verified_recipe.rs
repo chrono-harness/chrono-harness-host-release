@@ -35,6 +35,9 @@ pub mod publication;
 #[path = "version_order.rs"]
 pub mod version_order;
 
+#[path = "roadmap.rs"]
+pub mod roadmap;
+
 #[path = "verified_delivery.rs"]
 pub mod delivery;
 
