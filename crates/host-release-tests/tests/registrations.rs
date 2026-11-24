@@ -3,15 +3,22 @@ mod registrations;
 
 use registrations::{Method, query};
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 #[test]
 fn recipe_uses_stdin_and_preserves_action_evidence() {
     let projects = json!({"projects":[],"scripts":[]});
     let method = json!({"owner":"script:s","operation":"pack","tool":"packer","argv":["a b"],
                         "output_contract":{"schema":"output"}});
-    let result: BTreeMap<String, Vec<Method>> =
-        query("execution-methods", &projects, |bin, arg, input| {
+    let result: BTreeMap<String, Vec<Method>> = query(
+        "execution-methods",
+        &projects,
+        Path::new("/installed runner/bin"),
+        |bin, arg, env, input| {
+            assert_eq!(
+                env,
+                BTreeMap::from([("PATH".into(), "/installed runner/bin".into())])
+            );
             assert_eq!(
                 (bin, arg),
                 ("chrono-judge-registration", "execution-methods")
@@ -22,8 +29,9 @@ fn recipe_uses_stdin_and_preserves_action_evidence() {
                 serde_json::to_vec(&json!({"pack":[method]})).unwrap(),
                 vec![],
             ))
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
     assert_eq!(serde_json::to_value(&result["pack"][0]).unwrap(), method);
 }
 
@@ -45,11 +53,19 @@ fn preview_reports_rejected_invalid_and_unavailable_registration() {
         ),
         (Err("timeout".into()), "timeout"),
     ] {
-        let result =
-            query::<BTreeMap<String, Vec<String>>>("test-owners", &projects, |bin, arg, _| {
+        let result = query::<BTreeMap<String, Vec<String>>>(
+            "test-owners",
+            &projects,
+            Path::new("/another/bin"),
+            |bin, arg, env, _| {
+                assert_eq!(
+                    env,
+                    BTreeMap::from([("PATH".into(), "/another/bin".into())])
+                );
                 assert_eq!((bin, arg), ("chrono-judge-registration", "test-owners"));
                 reply
-            });
+            },
+        );
         assert!(result.unwrap_err().starts_with(expected));
     }
 }

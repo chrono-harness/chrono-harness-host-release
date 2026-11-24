@@ -1,6 +1,7 @@
 //! Public registration views consumed by release recipes and preview selection.
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
+use std::{collections::BTreeMap, path::Path};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -16,10 +17,20 @@ pub struct Method {
 pub(crate) fn query<T: DeserializeOwned>(
     view: &str,
     projects: &Value,
-    run: impl FnOnce(&str, &str, &[u8]) -> Result<(i32, Vec<u8>, Vec<u8>), String>,
+    runner_directory: &Path,
+    run: impl FnOnce(
+        &str,
+        &str,
+        BTreeMap<String, String>,
+        &[u8],
+    ) -> Result<(i32, Vec<u8>, Vec<u8>), String>,
 ) -> Result<T, String> {
     let bytes = serde_json::to_vec(projects).map_err(|error| error.to_string())?;
-    let (code, stdout, stderr) = run("chrono-judge-registration", view, &bytes)?;
+    let path = runner_directory
+        .to_str()
+        .ok_or("invalid runner directory")?;
+    let env = BTreeMap::from([("PATH".into(), path.into())]);
+    let (code, stdout, stderr) = run("chrono-judge-registration", view, env, &bytes)?;
     if code != 0 {
         let message = String::from_utf8(stderr).map_err(|error| error.to_string())?;
         return Err(if message.is_empty() {
