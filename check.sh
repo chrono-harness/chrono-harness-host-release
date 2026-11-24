@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-native_only=false
-if [[ ${1:-} == --native && $# -eq 1 ]]; then
-  native_only=true
-elif [[ $# -ne 0 ]]; then
+if [[ $# -eq 0 ]]; then
+  /bin/sh .chrono-harness/ci/install.sh
+  export PATH="$PWD/.chrono-harness/bin:$PATH"
+  export CHRONO_CHECK_SOURCE=${CHRONO_CHECK_SOURCE:-local}
+  exec .chrono-harness/bin/chrono-harness check
+fi
+if [[ $# -ne 1 || $1 != --native ]]; then
   echo 'usage: ./check.sh [--native]' >&2
   exit 2
 fi
@@ -46,35 +49,17 @@ executable=$(jq -ers --arg manifest "$(pwd -P)/$product" --arg source "$(pwd -P)
 ' "$scratch/build.jsonl") || coverage_failure "native release entry was not identified"
 test -x "$executable" || coverage_failure "native release executable is missing"
 
-if "$native_only"; then exit 0; fi
-
-prove() {
-  chrono-host-bootstrap run-compiler-proof "$scratch" "$1" "${VERUS:-verus}" "$2" ||
-    coverage_failure "$1: verifier execution failed"
-}
-
-admit_proof() {
-  local operation=$1
-  shift
-  chrono-host-bootstrap collect-compiler-proof "$scratch" "$operation" "${VERUS:-verus}" \
-    0.2026.04.24.f8e1704 f8e17045c4ac17a02e566b8997070f2eecc255be "$@" ||
-    coverage_failure "$operation: required proof execution was not admitted"
-}
-
 src=crates/host-release/src
 tests=crates/host-release-tests/tests
 included="$tests/../../host-release/src"
 
-prove verify.release-recipe "$src/verified_recipe.rs"
-prove verify.release-recipe-tests "$tests/verified_recipe.rs"
-
-admit_proof verify.release-recipe "$src/verified_recipe.rs" "$src/main.rs" \
+chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/verify.release-recipe.rlib "$src/verified_recipe.rs" "$src/main.rs" \
   "$src/execution.rs" "$src/frontend.rs" \
   "$src/receipt.rs" "$src/recipe.rs" \
   "$src/preview.rs" "$src/staging.rs" \
   "$src/delivery.rs" "$src/publication.rs" \
   "$src/version_order.rs" "$src/roadmap.rs" "$src/verified_delivery.rs"
-admit_proof verify.release-recipe-tests "$tests/verified_recipe.rs" "$included/verified_recipe.rs" \
+chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/verify.release-recipe-tests.rlib "$tests/verified_recipe.rs" "$included/verified_recipe.rs" \
   "$included/main.rs" "$included/execution.rs" \
   "$included/frontend.rs" "$included/receipt.rs" \
   "$included/recipe.rs" "$included/preview.rs" \
