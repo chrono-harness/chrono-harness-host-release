@@ -1,0 +1,1086 @@
+{
+  "schema_version": 2,
+  "status": "proposed",
+  "files": [
+    {
+      "path": ".chrono-harness/.gitignore",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".chrono-harness/FILEMAP.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".chrono-harness/USAGE.md",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".chrono-harness/ci/check.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".chrono-harness/ci/install.sh",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": ".chrono-harness/ci/units.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".chrono-harness/config.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".chrono-harness/judges.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".chrono-harness/pr.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".chrono-harness/projects.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".chrono-harness/rules.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".chrono-harness/template-answers.yml",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".chrono-harness/workflow.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".chrono-harness/worktree.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
+      "path": ".config/mise/conf.d/chrono-harness.toml",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug.yml",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/documentation.yml",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/enhancement.yml",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/question.yml",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".github/workflows/check.yml",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": ".gitignore",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": "AGENTS.md",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": [],
+      "symlink": "CLAUDE.md"
+    },
+    {
+      "path": "CLAUDE.md",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": "README.md",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": "check.sh",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release-tests/Cargo.lock",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release-tests/Cargo.toml",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release-tests/tests/identity.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release-tests/tests/originals.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release-tests/tests/proof_support/host-release/publication.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/proof_support/host-release/recipe.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/proof_support/host-release/staging.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/proof_support/host-release/support/execution.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/proof_support/host-release/support/failure_case.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/proof_support/host-release/support/frontend.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/proof_support/host-release/support/release_tool.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/query_tool.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release-tests/tests/registrations.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release-tests/tests/verified_recipe.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/Cargo.lock",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/Cargo.toml",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/bootstrap.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/codec.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/committed.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/delivery.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/evidence.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/execution.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/files.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/frontend.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/identity.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/lib.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/local.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/main.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/observed.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/preview.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/process.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/publication.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/receipt.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/recipe.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/registrations.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/roadmap.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/staging.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/template_run.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/transport.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    },
+    {
+      "path": "crates/host-release/src/verified_delivery.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/verified_recipe.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "crates/host-release/src/version_order.rs",
+      "owner": "host-release",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
+    },
+    {
+      "path": "docs/licenses/methodology-attribution.md",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": "docs/licenses/trureturing-Apache-2.0.txt",
+      "owner": "host",
+      "surface": "documentation",
+      "cost": "unmeasured",
+      "edges": []
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ]
+    }
+  ],
+  "project_edges": [],
+  "cost_models": {
+    "unmeasured": {
+      "cpu_ms": null,
+      "wall_ms": null,
+      "peak_rss_bytes": null,
+      "io_bytes": null,
+      "basis": "unknown"
+    }
+  },
+  "test_costs": [
+    {
+      "test": "host-release-tests",
+      "cost": "unmeasured"
+    }
+  ],
+  "execution_plans": {
+    "test:host-release-tests": {
+      "operations": [
+        "verify.release-recipe",
+        "verify.release-recipe-tests",
+        "host-release.owner-check"
+      ],
+      "timeout_seconds": 600,
+      "output_limit_bytes": 2097152
+    }
+  }
+}
