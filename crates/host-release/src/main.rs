@@ -33,6 +33,11 @@ fn run() -> Result<i32, String> {
             chrono_host_release::template_run::acceptance(std::io::stdin().lock())?;
             Ok(0)
         },
+        [command] if command == "template-latest-stable-v1" => {
+            let tag = chrono_host_release::template_run::latest_stable(std::io::stdin().lock())?;
+            println!("{}", serde_json::to_string(&tag).map_err(|e| e.to_string())?);
+            Ok(0)
+        },
         [command] if command == "template-next-version-v1" => {
             let version = chrono_host_release::template_run::next_version(std::io::stdin().lock())?;
             println!("{}", serde_json::to_string(&version).map_err(|e| e.to_string())?);
