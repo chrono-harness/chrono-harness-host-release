@@ -74,7 +74,7 @@ fn run() -> Result<i32, String> {
             frontend::export(Path::new(root), Path::new(output), &std::env::vars_os().collect())?;
             Ok(0)
         },
-        _ => Err("usage: chrono-host-release roadmap-v1 | chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]".into()),
+        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]\n       chrono-host-release roadmap-v1 | template-run-v1 | template-acceptance-v1".into()),
     }
 }
 
