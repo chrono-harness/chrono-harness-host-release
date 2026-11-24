@@ -145,6 +145,36 @@ fn roadmap_queries_use_github_objects_and_return_the_owned_issue_number() {
         );
         serde_json::from_slice(&output).unwrap()
     };
+    let releases = json!([
+        {"draft":true, "tag_name":"v1.0.0-r", "prerelease":true, "published_at":"2026-03-01"},
+        {"draft":false, "tag_name":"v1.0.0-a", "prerelease":true, "published_at":"2026-01-01"},
+        {"draft":false, "tag_name":"v1.0.0-b", "prerelease":true, "published_at":"2026-01-01"},
+        {"draft":false, "tag_name":"v1.0.01-a", "prerelease":true, "published_at":"2026-02-01"},
+        {"draft":false, "tag_name":"v1.0.0", "prerelease":false, "published_at":"2026-01-05"},
+        {"draft":false, "tag_name":"v1.0.0", "prerelease":false, "published_at":"2026-01-04"}
+    ]);
+    for (event, tag) in [
+        (json!(null), "v1.0.01-a"),
+        (json!(""), "v1.0.01-a"),
+        (json!("v2.0.0"), "v2.0.0"),
+    ] {
+        assert_eq!(
+            query(
+                json!({"operation":"release-selection","event_tag":event,"milestones":["v1.0.0","v2.0.0"],"releases":releases})
+            ),
+            {
+                let mut titles = json!({"v1.0.0":{"final":5,"preview":1},"v2.0.0":{"final":null,"preview":null}});
+                if tag == "v1.0.01-a" {
+                    titles["v1.0.01"] = json!({"final":null,"preview":3});
+                }
+                json!({"tag":tag,"milestones":titles})
+            }
+        );
+    }
+    assert_eq!(
+        query(json!({"operation":"release-selection","milestones":[],"releases":[]})),
+        json!({"tag":null,"milestones":{}})
+    );
     let marker = "<!-- chrono-harness release-run 123 -->";
     let bot = json!({"login":"github-actions[bot]"});
     let history = json!([

@@ -200,6 +200,32 @@ fn preview_reuse_binds_the_original_landing_base() {
     expect_recipe(!policy::recipe::preview::matching_predecessor(true, "earlier", "base"));
 }
 
+#[cfg_attr(not(verus_keep_ghost), test)]
+fn milestone_release_selection_keeps_first_tie_and_last_final() {
+    use policy::roadmap::{ReleaseFacts, Selection, select_release, event_or_newest};
+    proof { reveal_strlit(""); reveal_strlit("event"); }
+    let preview = ReleaseFacts { tag: &[118u8,49,45,112], date: &[50u8], draft: false, preview: true };
+    let stable = ReleaseFacts { tag: &[118u8,49], date: &[49u8], draft: false, preview: false };
+    let draft = ReleaseFacts { tag: &[118u8,49,45,100], date: &[50u8], draft: true, preview: true };
+    let rows = [draft, stable, preview, preview, stable];
+    proof {
+        reveal_with_fuel(policy::roadmap::later, 3);
+        assert(policy::roadmap::later(preview.date@,stable.date@,0));
+        assert(!policy::roadmap::later(preview.date@,preview.date@,0));
+        assert(!policy::roadmap::later(stable.date@,preview.date@,0));
+        assert(policy::roadmap::marker_at(preview.tag@, stable.tag@, 0)) by {
+            assert(preview.tag@.subrange(0,2) =~= stable.tag@);
+        }
+        reveal_with_fuel(policy::roadmap::choice, 7); reveal_with_fuel(policy::roadmap::later, 2); }
+    expect_recipe(select_release(&rows, Selection::Newest) == Some(2));
+    expect_recipe(select_release(&rows, Selection::Preview(&[118u8,49])) == Some(2));
+    expect_recipe(select_release(&rows, Selection::Final(&[118u8,49])) == Some(4));
+    expect_recipe(select_release(&rows, Selection::Preview(&[118u8,49,48])).is_none());
+    expect_recipe(select_release(&[], Selection::Newest).is_none());
+    expect_recipe(event_or_newest(Some("event"), None).is_some());
+    expect_recipe(event_or_newest(Some(""), None).is_none());
+}
+
 // 同一预期在 Verus 中证明，在普通 Rust 中实际执行。
 #[cfg_attr(not(verus_keep_ghost), test)]
 fn roadmap_uses_only_public_releases_unassigned_open_issues_and_completed_milestones() {
