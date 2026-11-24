@@ -9,6 +9,7 @@ test = false
 doctest = false
 
 [dependencies]
+litrs = "=1.0.1"
 vstd = "=0.0.0-2026-04-20-1748"
 sha2 = "0.10"
 serde_jcs = "=0.2.0"
