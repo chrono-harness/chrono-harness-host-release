@@ -14,6 +14,8 @@ use vstd::prelude::*;
 
 #[cfg(verus_keep_ghost)]
 use vstd::vpanic as panic;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
 
 #[cfg(verus_keep_ghost)]
 #[path = "proof_support/host-release/publication.rs"]
@@ -39,6 +41,24 @@ mod staging_fixture;
 mod tool_fixture;
 
 verus! {
+
+#[cfg(verus_keep_ghost)]
+fn fixed_series_requires_preview_and_rolling_accepts_stable(core: &str, parts: &[&str], serial: &str)
+    requires parts.len() == 3,
+        forall|i: int| 0 <= i < parts.len() ==> delivery::decimal(parts@[i].spec_bytes(), true),
+        delivery::decimal(serial.spec_bytes(), false),
+{
+    expect_recipe(delivery::consumer_series(false, core, parts, core, Some(serial)));
+    expect_recipe(!delivery::consumer_series(false, core, parts, core, None));
+    expect_recipe(delivery::consumer_series(true, core, parts, core, None));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
+fn consumer_pins_reject_bad_series_and_missing_downloads() {
+    let empty: [&str; 0] = [];
+    expect_recipe(!delivery::consumer_series(true, "", &empty, "", None));
+    expect_recipe(!delivery::installed_download(None, "url", None));
+}
 
 #[cfg_attr(not(verus_keep_ghost), test)]
 fn template_release_preserves_cardinality_and_the_consumer_pin() {
