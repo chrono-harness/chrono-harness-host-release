@@ -68,19 +68,20 @@ fn verify_check(
     }
 }
 
+fn job_names(jobs: &[Value]) -> Vec<Option<&str>> {
+    jobs.iter().map(|job| job["name"].as_str()).collect()
+}
+
 pub fn acceptance(input: impl Read) -> Result<(), String> {
     let request: Acceptance = read(input)?;
     if !acceptance_declared(request.required_jobs.len(), &request.step) {
         return Err("missing consumer acceptance obligations".into());
     }
+    let names = job_names(&request.jobs);
     for name in &request.required_jobs {
-        // GitHub returns jobs in provider order. The publisher previously used the last job of a given name.
-        let job = request
-            .jobs
-            .iter()
-            .rev()
-            .find(|job| job["name"].as_str() == Some(name.as_str()))
+        let index = crate::verified_recipe::delivery::last_job_named(&names, name)
             .ok_or_else(|| format!("missing successful consumer on {name}"))?;
+        let job = &request.jobs[index];
         let steps: Vec<_> = job["steps"]
             .as_array()
             .into_iter()
@@ -469,12 +470,9 @@ impl OriginRequest {
             return Err("different release workflow or producing attempt".into());
         }
         let name = format!("Build {platform}");
-        let job = row
-            .jobs
-            .iter()
-            .rev()
-            .find(|job| job["name"].as_str() == Some(name.as_str()))
+        let index = crate::verified_recipe::delivery::last_job_named(&job_names(&row.jobs), &name)
             .ok_or_else(|| format!("missing product build on {platform}"))?;
+        let job = &row.jobs[index];
         let steps: Vec<_> = job["steps"]
             .as_array()
             .into_iter()

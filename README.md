@@ -17,7 +17,7 @@
 可选的 GitHub 发布配方在选择预览和晋升正式版时使用以下两个只读命令。每个命令从 stdin 读取一个 JSON 对象，接受时退出 0，拒绝时向 stderr 写原因并退出 2。
 
 - `template-run-v1` 接受 `repository`、`branch`、`workflow`（工作流文件名）、`sha` 和原始 GitHub `run`。它核对两处仓库身份、工作流、分支、提交及该 push 的完成结果。
-- `template-acceptance-v1` 接受 `sha`、`required_jobs`、`step` 与 GitHub 指定 run/attempt 返回的 `jobs` 数组。每个要求的作业都要在该提交成功，且至少有一次指定步骤成功。调用方负责从指定运行及尝试读取这些原件。
+- `template-acceptance-v1` 接受 `sha`、`required_jobs`、`step` 与 GitHub 指定 run/attempt 返回的 `jobs` 数组。每个要求的作业都要在该提交成功，且至少有一次指定步骤成功。调用方负责从指定运行及尝试读取这些原件。同一尝试返回多条同名作业时，使用 GitHub 原数组中最后一条精确同名的记录。构建来源也按同一规则取作业。
 
 `template-promotion-v1` 读取规划器从 GitHub 取得的晋升证据。请求的 `kind` 和成功时的 JSON 输出如下。
 

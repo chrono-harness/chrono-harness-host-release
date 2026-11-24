@@ -474,6 +474,29 @@ fn draft_notes_use_the_full_original_github_body() {
 }
 
 #[test]
+fn consumer_acceptance_checks_the_last_matching_row_from_the_requested_attempt() {
+    use chrono_host_release::template_run::acceptance;
+    use serde_json::json;
+    let sha = "a".repeat(40);
+    let accepted = json!({"name":"consumer","head_sha":sha,"conclusion":"success",
+        "steps":[{"name":"exercise","conclusion":"success"}]});
+    let mut rejected = accepted.clone();
+    rejected["conclusion"] = json!("failure");
+    let unrelated = json!({"name":"consumer-extra"});
+    for (jobs, success) in [
+        (json!([rejected, accepted, unrelated]), true),
+        (json!([accepted, rejected, unrelated]), false),
+        (json!([unrelated, {"name":1}]), false),
+    ] {
+        let request = json!({"sha":sha,"step":"exercise","required_jobs":["consumer"],"jobs":jobs});
+        assert_eq!(
+            acceptance(serde_json::to_vec(&request).unwrap().as_slice()).is_ok(),
+            success
+        );
+    }
+}
+
+#[test]
 fn platform_origins_reuse_only_the_earlier_successful_build_of_the_same_run() {
     use chrono_host_release::template_run::binary_origins;
     use serde_json::{Value, json};
@@ -507,6 +530,20 @@ fn platform_origins_reuse_only_the_earlier_successful_build_of_the_same_run() {
     let result = submit(&valid).unwrap();
     assert_eq!(result["builds"]["product-linux-x86_64"]["attempt"], 1);
     assert_eq!(result["builds"]["product-macos-aarch64"]["job"], 121);
+    let built = valid["linux"]["jobs"][0].clone();
+    let mut earlier = built.clone();
+    earlier["id"] = json!(888);
+    let mut duplicates = valid.clone();
+    duplicates["linux"]["jobs"] = json!([earlier, built]);
+    assert_eq!(
+        submit(&duplicates).unwrap()["builds"]["product-linux-x86_64"]["job"],
+        120
+    );
+    duplicates["linux"]["jobs"] = json!([built, earlier]);
+    assert_eq!(
+        submit(&duplicates).unwrap()["builds"]["product-linux-x86_64"]["job"],
+        888
+    );
     for (path, bad) in [
         ("/linux", valid["macos"].clone()),
         ("/check/id", json!(4)),

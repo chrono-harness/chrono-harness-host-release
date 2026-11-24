@@ -126,6 +126,19 @@ fn patch_successor_accepts_carry_and_numerical_order() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn select_the_last_exact_job_in_provider_order() {
+    proof {
+        reveal_strlit("Build"); reveal_strlit("Build again");
+        assert("Build"@.len() != "Build again"@.len());
+    }
+    let rows = [Some("Build"), None, Some("Build again"), Some("Build"), None];
+    expect_recipe(delivery::last_job_named(&rows, "Build") == Some(3));
+    expect_recipe(delivery::last_job_named(&rows, "Build again") == Some(2));
+    expect_recipe(delivery::last_job_named(&[], "Build").is_none());
+    expect_recipe(delivery::last_job_named(&[None, Some("Build again")], "Build").is_none());
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn release_requires_a_named_successful_step_on_the_selected_job_and_commit() {
     proof { reveal_strlit("exercise"); reveal_strlit(""); assert("exercise"@.len() != 0); }
     expect_recipe(delivery::acceptance_declared(1, "exercise"));
