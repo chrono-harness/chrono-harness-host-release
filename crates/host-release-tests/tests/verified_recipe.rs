@@ -41,6 +41,18 @@ mod tool_fixture;
 verus! {
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn template_release_preserves_cardinality_and_the_consumer_pin() {
+    let empty_expected: [delivery::ExpectedAsset; 0] = [];
+    let empty_actual: [delivery::ObservedAsset; 0] = [];
+    expect_recipe(delivery::release_assets(&empty_expected, &empty_actual));
+    let expected = [("tool", None)];
+    let missing = [(Some("tool"), Some("uploaded"), None)];
+    expect_recipe(!delivery::release_assets(&expected, &empty_actual));
+    expect_recipe(!delivery::release_assets(&empty_expected, &missing));
+    expect_recipe(!delivery::release_assets(&expected, &missing));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn patch_successor_accepts_carry_and_numerical_order() {
     let nine = [57u8];
     let increased = policy::version_order::increment(&nine);
