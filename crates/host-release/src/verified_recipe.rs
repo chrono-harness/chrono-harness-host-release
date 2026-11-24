@@ -32,6 +32,9 @@ pub mod native_delivery;
 #[path = "publication.rs"]
 pub mod publication;
 
+#[path = "version_order.rs"]
+pub mod version_order;
+
 #[path = "verified_delivery.rs"]
 pub mod delivery;
 
