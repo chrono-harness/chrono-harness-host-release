@@ -19,6 +19,8 @@
       ".chrono-harness/ci/check.json",
       ".chrono-harness/ci/units.json",
       ".chrono-harness/worktree.json",
+      ".chrono-harness/cleanup.json",
+      ".chrono-harness/retention.json",
       ".chrono-harness/config.json",
       ".config/mise/conf.d/chrono-harness.toml",
       ".chrono-harness/ci/install.sh",

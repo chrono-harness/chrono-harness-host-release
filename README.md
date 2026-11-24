@@ -4,6 +4,14 @@
 
 在仓库根目录运行 `mise exec -- ./check.sh`。本仓的 mise 配置固定 Verus 版本，检查按变更验证发布配方及其消费者。
 
+本地主检出的准备记录、执行原件和失败诊断保留 24 小时。时间从各原件登记的起点计算；活跃读者释放后，由下一次维护删除到期原件。需要长期使用的结果请在窗口内转存。采用政策前已有的原件没有登记，需按原生产者与使用方核对。
+
+已运行本仓检查并安装好工具的长期检出，可以把下列命令加入本机用户的 crontab，每小时维护一次。将路径替换为本机主检出的绝对路径。维护失败时退出非零，诊断写至标准错误。
+
+```cron
+0 * * * * cd '/absolute/path/to/chrono-harness-host-release' && PATH="$PWD/.chrono-harness/bin:$PATH" .chrono-harness/bin/chrono-worktree maintain >/dev/null
+```
+
 [固定来源](https://github.com/ChronoAIProject/chrono-harness/tree/5f6892dfa2f73675a84e4ebdc3b06eb83b824d6e/crates/host-release)
 
 安装本仓清单固定的 chrono-judge-registration，并放入 PATH。发布配方从 execution-methods 读取登记方法，预览按固定提交读取登记字节，并从 test-owners 取得测试归属。两项查询的子进程使用宿主所选 chrono-harness 所在的目录作为 PATH，以调用同一份 runner。
