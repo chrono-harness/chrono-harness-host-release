@@ -27,6 +27,8 @@
 
 `template-next-version-v1` 接受一个 JSON 对象，例如 `{"floor":"0.1.2","latest":"0.1.11"}`，返回 JSON 字符串 `"0.1.12"`。首次发布传 `latest: null`。后续版本取计划下限与上一正式版本的下一补丁版中较大的版本。三个十进制分量允许任意位数并使用规范 SemVer 拼写。
 
+模板预览发布通过 `template-publication-v1` 检查草稿正文。传入 `{"kind":"notes","release":原始发行对象,"expected":预期正文字符串}`，返回 JSON 布尔值。只有原对象的 `body` 是字符串且全文相同时才返回 true。调用方据此更新草稿，并在上传资产后复核构建来源。
+
 可选的 GitHub issue-roadmap 工作流用 `chrono-host-release roadmap-v1` 判定哪些 GitHub 对象需要更新。标准输入和输出各为一个 JSON 值。无效输入退出 2，调用方应停止写入。工作流自行分页读取 GitHub 原件并按返回结果调用原 API。
 
 | 输入中的 `operation` | 其余输入 | 输出 |

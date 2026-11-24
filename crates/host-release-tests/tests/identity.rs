@@ -455,6 +455,25 @@ fn source_release_inventory_selects_the_largest_public_canonical_version() {
 }
 
 #[test]
+fn draft_notes_use_the_full_original_github_body() {
+    use chrono_host_release::template_run::publication;
+    use serde_json::{Value, json};
+
+    let expected = "Build origins\n\n```json\n{}\n```";
+    for (release, matches) in [
+        (json!({"body": expected}), true),
+        (json!({"body": format!("{expected}\n")}), false),
+        (json!({"body": null}), false),
+        (json!({"body": 1}), false),
+        (json!({}), false),
+    ] {
+        let request = json!({"kind":"notes","expected":expected,"release":release});
+        let result = publication(serde_json::to_vec(&request).unwrap().as_slice()).unwrap();
+        assert_eq!(result, Value::Bool(matches));
+    }
+}
+
+#[test]
 fn platform_origins_reuse_only_the_earlier_successful_build_of_the_same_run() {
     use chrono_host_release::template_run::binary_origins;
     use serde_json::{Value, json};
