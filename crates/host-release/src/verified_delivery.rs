@@ -57,6 +57,26 @@ pub fn landed_push(fields: &[Option<&str>; 8], repository: &str, workflow_path: 
     valid
 }
 
+/// GitHub supplies jobs in provider order. Use the final row carrying the exact name.
+pub fn last_job_named(names: &[Option<&str>], expected: &str) -> (found: Option<usize>)
+    ensures match found {
+        Some(i) => i < names.len() && text_pair((names@[i as int], expected))
+            && forall|j: int| i < j < names.len() ==> !text_pair((#[trigger] names@[j], expected)),
+        None => forall|j: int| 0 <= j < names.len() ==> !text_pair((#[trigger] names@[j], expected)),
+    },
+{
+    let mut end = names.len();
+    while end > 0
+        invariant end <= names.len(),
+            forall|j: int| end <= j < names.len() ==> !text_pair((#[trigger] names@[j], expected)),
+        decreases end,
+    {
+        end -= 1;
+        if text_fields(&[(names[end], expected)]) { return Some(end); }
+    }
+    None
+}
+
 pub open spec fn exercised_step(steps: Seq<(Option<&str>, Option<&str>)>, step: &str) -> bool {
     exists|i: int| 0 <= i < steps.len() && text_pair((steps[i].0, step)) && text_pair((steps[i].1, "success"))
 }
