@@ -294,6 +294,17 @@ fn release_header(release: &Value, identity: &Identity) -> Result<u64, String> {
 }
 
 #[cfg(not(verus_keep_ghost))]
+pub(crate) fn observed_asset(asset: &Value) -> policy::ObservedAsset<'_> {
+    (
+        asset["name"].as_str(),
+        asset["state"].as_str(),
+        asset["digest"]
+            .as_str()
+            .and_then(|s| s.strip_prefix("sha256:")),
+    )
+}
+
+#[cfg(not(verus_keep_ghost))]
 fn remote_assets(
     config: &Config,
     id: u64,
@@ -326,13 +337,7 @@ fn remote_assets(
             .get(name)
             .ok_or_else(|| error(format!("unexpected remote asset {name}")))?;
         if !remaining.remove(name)
-            || !policy::text_fields(&[
-                (asset["state"].as_str(), "uploaded"),
-                (
-                    asset["digest"].as_str(),
-                    &format!("sha256:{}", expected.sha256),
-                ),
-            ])
+            || !policy::uploaded_asset((name, Some(&expected.sha256)), observed_asset(asset))
             || !policy::number_fields(&[(asset["size"].as_u64(), expected.size)])
         {
             return Err(error(format!("remote asset identity conflicts: {name}")));
