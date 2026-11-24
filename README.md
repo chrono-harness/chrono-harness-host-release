@@ -19,6 +19,17 @@
 - `template-run-v1` 接受 `repository`、`branch`、`workflow`（工作流文件名）、`sha` 和原始 GitHub `run`。它核对两处仓库身份、工作流、分支、提交及该 push 的完成结果。
 - `template-acceptance-v1` 接受 `sha`、`required_jobs`、`step` 与 GitHub 指定 run/attempt 返回的 `jobs` 数组。每个要求的作业都要在该提交成功，且至少有一次指定步骤成功。调用方负责从指定运行及尝试读取这些原件。
 
+`template-promotion-v1` 读取规划器从 GitHub 取得的晋升证据。请求的 `kind` 和成功时的 JSON 输出如下。
+
+| kind | 输入 | 输出 |
+| --- | --- | --- |
+| `contains` | 按 base...head 读取的原始 `comparison` | head 包含 base 时返回 null |
+| `candidate` | 上一正式提交...待发布提交的 `comparison` | 已覆盖返回 true，可继续返回 false，分叉或未知则报错 |
+| `explicit` | 计划的 `tag` 和同名 `release` | 已公开正式版返回 true，草稿或预览返回 false，身份或必需字段不符则报错 |
+| `adopted` | `checked_main`（手动晋升传 null）、预览提交 `selected`、`tag`、`version`、`repository`、`workflow`、源检查 `origin`、selected...dev 的 `development` 和 main...selected 的 `main` | 返回 null 表示已选择的公开预览可由该源检查晋升 |
+
+调用方按固定的 tag 读取提交并用 `template-release-v1` 验证公开预览和资产。GitHub 的比较方向为 head 相对 base。晋升核对成功 dev push 的仓库、工作流、提交、实际正整数运行号和预览标签的规范十进制序号。GitHub 负责提供原始观察，更新 main 时仍须使用非强制快进。
+
 `template-consumer-pin-v1` 从下游已落地清单判定安装版本，成功返回 JSON 数组 `[tag, checksums]`。Copier 请求提供 `kind="copier"`、`repository`、`version`、`rolling` 和解析后的 `answers`，源模板产物的 checksums 为 null。二进制请求提供 `kind="binary"`、`repository`、`version`、`binary` 和 mise 的 `tool` 对象。返回对应 Linux x86_64 与 macOS arm64 安装资产的完整名称和 SHA-256。调用方从该宿主选定提交读取 YAML 或 TOML，随后以返回的标签和摘要核对公开发行。
 
 `template-binary-origins-v1` 从标准输入读取发布者的两个平台观察。根据固定 check、来源 SHA、release run/attempt、构建和上传步骤、artifact ID 与归档、文件 SHA-256 输出来源记录。同一 run 重试时可沿用较早且已经成功的平台作业。GitHub API 的读取与下载，以及下载文件的摘要计算，由发布适配器负责。

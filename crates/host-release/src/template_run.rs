@@ -219,6 +219,91 @@ pub fn latest_stable(input: impl Read) -> Result<Option<String>, String> {
 
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
+enum Promotion {
+    Contains {
+        comparison: Value,
+    },
+    Candidate {
+        comparison: Value,
+    },
+    Explicit {
+        tag: String,
+        release: Value,
+    },
+    Adopted {
+        checked_main: Option<String>,
+        selected: String,
+        tag: String,
+        version: String,
+        repository: String,
+        workflow: String,
+        origin: Value,
+        development: Value,
+        main: Value,
+    },
+}
+
+pub fn promotion(input: impl Read) -> Result<Value, String> {
+    use crate::verified_recipe::delivery as policy;
+    match read(input)? {
+        Promotion::Contains { comparison } => {
+            if !policy::includes_base(comparison["status"].as_str()) {
+                return Err("branch does not contain the selected commit".into());
+            }
+            Ok(Value::Null)
+        }
+        Promotion::Candidate { comparison } => {
+            policy::covered_candidate(comparison["status"].as_str())
+                .map(Value::Bool)
+                .ok_or_else(|| "candidate diverges from stable or has an unknown ancestry".into())
+        }
+        Promotion::Explicit { tag, release } => policy::explicit_stable(
+            release["tag_name"].as_str(),
+            &tag,
+            release["draft"].as_bool(),
+            release["prerelease"].as_bool(),
+            release["published_at"].as_str(),
+        )
+        .map(Value::Bool)
+        .ok_or_else(|| "different or incomplete stable release".into()),
+        Promotion::Adopted {
+            checked_main,
+            selected,
+            tag,
+            version,
+            repository,
+            workflow,
+            origin,
+            development,
+            main,
+        } => {
+            verify_check(&origin, &repository, &workflow, "dev", &selected)?;
+            let (core, serial) = tag
+                .strip_prefix('v')
+                .and_then(|s| s.split_once("-alpha."))
+                .ok_or("adopted tag is not a preview")?;
+            if !policy::adopted_preview(
+                checked_main.as_deref(),
+                &selected,
+                core,
+                &version,
+                serial.as_bytes(),
+                origin["run_number"].as_u64(),
+            ) {
+                return Err("main differs from the adopted preview or tag differs from the verified dev run".into());
+            }
+            if !policy::includes_base(development["status"].as_str())
+                || !policy::includes_base(main["status"].as_str())
+            {
+                return Err("preview is outside development or main cannot fast-forward".into());
+            }
+            Ok(Value::Null)
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum ConsumerPin {
     Copier {
         repository: String,
