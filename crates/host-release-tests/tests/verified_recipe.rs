@@ -54,6 +54,20 @@ fn fixed_series_requires_preview_and_rolling_accepts_stable(core: &str, parts: &
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn publication_replay_requires_an_existing_ref_and_all_assets() {
+    expect_recipe(delivery::publication_state(false, 0, None, None, "sha", 1) == 0);
+    expect_recipe(delivery::publication_state(true, 1, Some(true), None, "sha", 1) == 1);
+    expect_recipe(delivery::publication_state(true, 0, Some(true), Some("sha"), "sha", 1) == 1);
+    expect_recipe(delivery::publication_state(true, 0, Some(true), None, "sha", 1) == 3);
+    expect_recipe(delivery::publication_state(true, 1, Some(false), None, "sha", 0) == 2);
+    expect_recipe(delivery::publication_state(true, 1, Some(false), None, "sha", 1) == 3);
+    expect_recipe(delivery::publication_state(true, 0, Some(false), None, "sha", 0) == 3);
+    expect_recipe(delivery::publication_state(false, 2, None, None, "sha", 0) == 3);
+    expect_recipe(delivery::checksum_lines(&["one","two"], &["one","two"]));
+    expect_recipe(!delivery::checksum_lines(&["one","two"], &["one"]));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn consumer_pins_reject_bad_series_and_missing_downloads() {
     let empty: [&str; 0] = [];
     expect_recipe(!delivery::consumer_series(true, "", &empty, "", None));

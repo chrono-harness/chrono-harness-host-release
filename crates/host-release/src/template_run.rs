@@ -300,3 +300,132 @@ pub fn consumer_pin(input: impl Read) -> Result<Value, String> {
         }
     }
 }
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
+enum Publication {
+    Ref {
+        name: String,
+        source: String,
+        reference: Value,
+    },
+    Checksums {
+        expected: Vec<String>,
+        lines: Vec<String>,
+    },
+    State {
+        tag: String,
+        source: String,
+        prerelease: bool,
+        assets: std::collections::BTreeMap<String, String>,
+        reference: Value,
+        release: Value,
+    },
+}
+
+fn ref_status(reference: &Value, name: &str, source: &str) -> u8 {
+    crate::verified_recipe::delivery::selected_ref(
+        !reference.is_null(),
+        reference["ref"].as_str(),
+        name,
+        reference["object"]["type"].as_str(),
+        reference["object"]["sha"].as_str(),
+        source,
+    )
+}
+
+pub fn publication(input: impl Read) -> Result<Value, String> {
+    use crate::verified_recipe::delivery as policy;
+    use serde_json::json;
+    match read(input)? {
+        Publication::Ref {
+            name,
+            source,
+            reference,
+        } => {
+            if ref_status(&reference, &name, &source) != 1 {
+                return Err(format!(
+                    "reference {name} does not identify the selected commit"
+                ));
+            }
+            Ok(Value::Null)
+        }
+        Publication::Checksums {
+            mut expected,
+            mut lines,
+        } => {
+            expected.sort_unstable();
+            lines.sort_unstable();
+            let expected: Vec<_> = expected.iter().map(String::as_str).collect();
+            let actual: Vec<_> = lines.iter().map(String::as_str).collect();
+            if !policy::checksum_lines(&expected, &actual) {
+                return Err("asset checksums differ from SHA256SUMS".into());
+            }
+            Ok(Value::Null)
+        }
+        Publication::State {
+            tag,
+            source,
+            prerelease,
+            assets,
+            reference,
+            release,
+        } => {
+            let version = tag.strip_prefix('v').ok_or("expected a v-prefixed tag")?;
+            let (core, serial) = version
+                .split_once("-alpha.")
+                .map_or((version, None), |(core, serial)| (core, Some(serial)));
+            let parts: Vec<_> = core.split('.').collect();
+            if (prerelease && !policy::consumer_series(false, core, &parts, core, serial))
+                || (!prerelease && !policy::version_numbers(&parts))
+                || (!prerelease && serial.is_some())
+            {
+                return Err("tag does not identify the selected publication channel".into());
+            }
+            if assets.values().any(|hash| !policy::valid_digest(hash)) {
+                return Err("invalid expected publication digest".into());
+            }
+            let reference = ref_status(&reference, &format!("refs/tags/{tag}"), &source);
+            let mut missing = assets;
+            if !release.is_null() {
+                if !policy::positive(release["id"].as_u64())
+                    || !policy::text_fields(&[(release["tag_name"].as_str(), &tag)])
+                    || !policy::boolean_fields(&[(release["prerelease"].as_bool(), prerelease)])
+                {
+                    return Err("existing release identity or channel differs".into());
+                }
+                for asset in release["assets"]
+                    .as_array()
+                    .ok_or("missing release assets array")?
+                {
+                    let row = crate::publication::observed_asset(asset);
+                    let name = row.0.ok_or("missing asset name")?;
+                    let expected = missing
+                        .remove(name)
+                        .ok_or("unexpected or duplicate existing asset")?;
+                    if !policy::uploaded_asset((name, Some(&expected)), row) {
+                        return Err(format!(
+                            "existing release asset differs from selected bytes: {name}"
+                        ));
+                    }
+                }
+            }
+            let action = match policy::publication_state(
+                !release.is_null(),
+                reference,
+                release["draft"].as_bool(),
+                release["target_commitish"].as_str(),
+                &source,
+                missing.len(),
+            ) {
+                0 => "create",
+                1 => "resume",
+                2 => "replay",
+                _ => return Err("release or tag conflicts with the selected publication".into()),
+            };
+            Ok(
+                json!({"action":action, "create_tag":reference==0, "missing":missing.keys().collect::<Vec<_>>()}),
+            )
+        }
+    }
+}
