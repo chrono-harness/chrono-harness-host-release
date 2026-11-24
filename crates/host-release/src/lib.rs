@@ -20,5 +20,6 @@ pub mod receipt;
 pub mod recipe;
 mod registrations;
 pub mod staging;
+pub mod template_run;
 pub mod transport;
 pub mod verified_recipe;

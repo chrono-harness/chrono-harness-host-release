@@ -13,3 +13,8 @@
 原生发行前端使用 PATH 中提供 `original-report-v1` 的 chrono-host-bootstrap 验收构建原件。本仓安装清单固定该工具的发行版本与两平台摘要。导出从宿主根目录读取登记的构建报告与操作流；历史验收向报告生产者传入原提交和原树。发布配方及工作流由 release 自己从宿主的固定 Git 树读取。
 
 本仓 Cargo 构建只需要自身源码和已锁定的第三方依赖。运行发布命令时，安装清单中的 chrono-harness 通过 `observed-command-v1` 提供实时原始输出、执行身份、超时和终态。各发布单元把两流及回执保留在自己的输出目录。
+
+可选的 GitHub 发布配方在选择预览和晋升正式版时使用以下两个只读命令。每个命令从 stdin 读取一个 JSON 对象，接受时退出 0，拒绝时向 stderr 写原因并退出 2。
+
+- `template-run-v1` 接受 `repository`、`branch`、`workflow`（工作流文件名）、`sha` 和原始 GitHub `run`。它核对两处仓库身份、工作流、分支、提交及该 push 的完成结果。
+- `template-acceptance-v1` 接受 `sha`、`required_jobs`、`step` 与 GitHub 指定 run/attempt 返回的 `jobs` 数组。每个要求的作业都要在该提交成功，且至少有一次指定步骤成功。调用方负责从指定运行及尝试读取这些原件。

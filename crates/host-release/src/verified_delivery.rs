@@ -34,6 +34,59 @@ pub fn text_fields(fields: &[(Option<&str>, &str)]) -> (valid: bool)
     true
 }
 
+/// The identity and outcome of the GitHub run selected to publish a commit.
+pub fn landed_push(fields: &[Option<&str>; 8], repository: &str, workflow_path: &str, branch: &str, sha: &str) -> (valid: bool)
+    ensures valid == (
+        text_pair((fields@[0], repository)) && text_pair((fields@[1], repository))
+        && text_pair((fields@[2], workflow_path)) && text_pair((fields@[3], branch))
+        && text_pair((fields@[4], sha)) && text_pair((fields@[5], "push"))
+        && text_pair((fields@[6], "completed")) && text_pair((fields@[7], "success"))),
+{
+    let pairs = [(fields[0], repository), (fields[1], repository), (fields[2], workflow_path),
+        (fields[3], branch), (fields[4], sha), (fields[5], "push"),
+        (fields[6], "completed"), (fields[7], "success")];
+    let valid = text_fields(&pairs);
+    assert(valid == (text_pair(pairs@[0]) && text_pair(pairs@[1]) && text_pair(pairs@[2])
+        && text_pair(pairs@[3]) && text_pair(pairs@[4]) && text_pair(pairs@[5])
+        && text_pair(pairs@[6]) && text_pair(pairs@[7]))) by {
+        if !valid {
+            let i = choose|i:int| 0 <= i < pairs.len() && !text_pair(pairs@[i]);
+            assert(i == 0 || i == 1 || i == 2 || i == 3 || i == 4 || i == 5 || i == 6 || i == 7);
+        }
+    }
+    valid
+}
+
+pub open spec fn exercised_step(steps: Seq<(Option<&str>, Option<&str>)>, step: &str) -> bool {
+    exists|i: int| 0 <= i < steps.len() && text_pair((steps[i].0, step)) && text_pair((steps[i].1, "success"))
+}
+
+pub fn acceptance_job(name: Option<&str>, expected: &str, conclusion: Option<&str>, head: Option<&str>, sha: &str,
+    steps: &[(Option<&str>, Option<&str>)], step: &str) -> (valid: bool)
+    ensures valid == (text_pair((name, expected)) && text_pair((conclusion, "success"))
+        && text_pair((head, sha)) && exercised_step(steps@, step)),
+{
+    if !text_fields(&[(name, expected), (conclusion, "success"), (head, sha)]) { return false; }
+    let mut i = 0;
+    while i < steps.len()
+        invariant text_pair((name, expected)), text_pair((conclusion, "success")), text_pair((head, sha)),
+            i <= steps.len(), forall|j: int| 0 <= j < i ==>
+            !(text_pair((steps@[j].0, step)) && text_pair((steps@[j].1, "success"))),
+        decreases steps.len()-i,
+    {
+        if text_fields(&[(steps[i].0, step),(steps[i].1,"success")]) {
+            assert(exercised_step(steps@, step)) by { assert(0 <= i < steps.len()); }
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+pub fn acceptance_declared(names: usize, step: &str) -> (valid: bool)
+    ensures valid == (names > 0 && step@ != ""@),
+{ names > 0 && !same_text(step, "") }
+
 pub fn number_fields(fields: &[(Option<u64>, u64)]) -> (valid: bool)
     ensures valid <==> forall|i: int| 0 <= i < fields.len() ==> fields@[i].0 == Some(fields@[i].1),
 {

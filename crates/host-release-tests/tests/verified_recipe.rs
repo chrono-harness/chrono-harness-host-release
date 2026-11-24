@@ -41,6 +41,37 @@ mod tool_fixture;
 verus! {
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn release_requires_a_named_successful_step_on_the_selected_job_and_commit() {
+    proof { reveal_strlit("exercise"); reveal_strlit(""); assert("exercise"@.len() != 0); }
+    expect_recipe(delivery::acceptance_declared(1, "exercise"));
+    expect_recipe(!delivery::acceptance_declared(0, "exercise"));
+    expect_recipe(!delivery::acceptance_declared(1, ""));
+    let steps = [(Some("exercise"), Some("success"))];
+    expect_recipe(delivery::acceptance_job(Some("job"), "job", Some("success"), Some("sha"), "sha", &steps, "exercise"));
+    expect_recipe(!delivery::acceptance_job(Some("job"), "job", Some("success"), None, "sha", &steps, "exercise"));
+    expect_recipe(!delivery::acceptance_job(Some("job"), "job", Some("success"), Some("sha"), "sha", &[], "exercise"));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
+fn release_requires_the_selected_successful_push() {
+    proof {
+        reveal_strlit("success"); reveal_strlit("failure"); reveal_strlit("pull_request"); reveal_strlit("push");
+        assert("success"@.len() != "failure"@.len() || "success"@[0] != "failure"@[0]);
+        assert("pull_request"@.len() != "push"@.len());
+    }
+    let mut fields = [Some("repo"), Some("repo"), Some("path"), Some("dev"), Some("sha"), Some("push"), Some("completed"), Some("success")];
+    expect_recipe(delivery::landed_push(&fields, "repo", "path", "dev", "sha"));
+    fields[7] = Some("failure");
+    expect_recipe(!delivery::landed_push(&fields, "repo", "path", "dev", "sha"));
+    fields[7] = Some("success");
+    fields[5] = Some("pull_request");
+    expect_recipe(!delivery::landed_push(&fields, "repo", "path", "dev", "sha"));
+    fields[5] = Some("push");
+    fields[1] = None;
+    expect_recipe(!delivery::landed_push(&fields, "repo", "path", "dev", "sha"));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn component_recovery_checks_the_entrypoint_paths_and_copied_bytes() {
     proof {
         reveal_strlit("--select-preview"); reveal_strlit("--plan-preview");
