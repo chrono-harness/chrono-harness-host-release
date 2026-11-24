@@ -19,6 +19,8 @@
 - `template-run-v1` 接受 `repository`、`branch`、`workflow`（工作流文件名）、`sha` 和原始 GitHub `run`。它核对两处仓库身份、工作流、分支、提交及该 push 的完成结果。
 - `template-acceptance-v1` 接受 `sha`、`required_jobs`、`step` 与 GitHub 指定 run/attempt 返回的 `jobs` 数组。每个要求的作业都要在该提交成功，且至少有一次指定步骤成功。调用方负责从指定运行及尝试读取这些原件。
 
+`template-next-version-v1` 接受一个 JSON 对象，例如 `{"floor":"0.1.2","latest":"0.1.11"}`，返回 JSON 字符串 `"0.1.12"`。首次发布传 `latest: null`。后续版本取计划下限与上一正式版本的下一补丁版中较大的版本。三个十进制分量允许任意位数并使用规范 SemVer 拼写。
+
 可选的 GitHub issue-roadmap 工作流用 `chrono-host-release roadmap-v1` 判定哪些 GitHub 对象需要更新。标准输入和输出各为一个 JSON 值。无效输入退出 2，调用方应停止写入。工作流自行分页读取 GitHub 原件并按返回结果调用原 API。
 
 | 输入中的 `operation` | 其余输入 | 输出 |

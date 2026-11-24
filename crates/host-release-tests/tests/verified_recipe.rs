@@ -41,6 +41,21 @@ mod tool_fixture;
 verus! {
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn patch_successor_accepts_carry_and_numerical_order() {
+    let nine = [57u8];
+    let increased = policy::version_order::increment(&nine);
+    expect_recipe(increased.len()==2 && increased[0]==49 && increased[1]==48);
+    let ninety_nine = [57u8, 57u8];
+    let hundred = policy::version_order::increment(&ninety_nine);
+    expect_recipe(hundred.len()==3 && hundred[0]==49 && hundred[1]==48 && hundred[2]==48);
+    let two = [50u8];
+    let ten = [49u8, 48u8];
+    let zero = [48u8];
+    expect_recipe(policy::version_order::above([&two,&ten,&zero],[&two,&nine,&nine]));
+    expect_recipe(!policy::version_order::above([&two,&nine,&nine],[&two,&ten,&zero]));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn release_requires_a_named_successful_step_on_the_selected_job_and_commit() {
     proof { reveal_strlit("exercise"); reveal_strlit(""); assert("exercise"@.len() != 0); }
     expect_recipe(delivery::acceptance_declared(1, "exercise"));

@@ -39,7 +39,7 @@ filename=${metadata##*/}
 stem=${filename#lib}
 stem=${metadata%/*}/${stem%.rmeta}
 chrono-host-bootstrap check-compiler-sources native "$stem" \
-  src/lib.rs src/verified_recipe.rs src/verified_delivery.rs src/recipe.rs \
+  src/lib.rs src/verified_recipe.rs src/verified_delivery.rs src/version_order.rs src/recipe.rs \
   src/frontend.rs src/execution.rs src/receipt.rs src/preview.rs \
   src/staging.rs src/delivery.rs src/publication.rs src/template_run.rs src/roadmap.rs ||
   coverage_failure "native library differs from required sources"
@@ -64,13 +64,13 @@ admit_proof verify.release-recipe "$src/verified_recipe.rs" "$src/main.rs" \
   "$src/receipt.rs" "$src/recipe.rs" \
   "$src/preview.rs" "$src/staging.rs" \
   "$src/delivery.rs" "$src/publication.rs" \
-  "$src/roadmap.rs" "$src/verified_delivery.rs"
+  "$src/version_order.rs" "$src/roadmap.rs" "$src/verified_delivery.rs"
 admit_proof verify.release-recipe-tests "$tests/verified_recipe.rs" "$included/verified_recipe.rs" \
   "$included/main.rs" "$included/execution.rs" \
   "$included/frontend.rs" "$included/receipt.rs" \
   "$included/recipe.rs" "$included/preview.rs" \
   "$included/staging.rs" "$included/delivery.rs" \
-  "$included/publication.rs" "$included/roadmap.rs" "$included/verified_delivery.rs" \
+  "$included/publication.rs" "$included/version_order.rs" "$included/roadmap.rs" "$included/verified_delivery.rs" \
   "$tests/proof_support/host-release/publication.rs" "$tests/proof_support/host-release/recipe.rs" \
   "$tests/proof_support/host-release/support/execution.rs" "$tests/proof_support/host-release/support/failure_case.rs" \
   "$tests/proof_support/host-release/support/frontend.rs" "$tests/proof_support/host-release/staging.rs" \

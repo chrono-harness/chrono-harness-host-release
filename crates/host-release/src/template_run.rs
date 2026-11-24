@@ -92,3 +92,39 @@ pub fn acceptance(input: impl Read) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VersionPlan {
+    floor: String,
+    latest: Option<String>,
+}
+
+fn components(core: &str) -> Result<[&[u8]; 3], String> {
+    let parts: Vec<_> = core.split('.').collect();
+    if !crate::verified_recipe::delivery::version_numbers(&parts) {
+        return Err(format!("invalid release version {core}"));
+    }
+    Ok([
+        parts[0].as_bytes(),
+        parts[1].as_bytes(),
+        parts[2].as_bytes(),
+    ])
+}
+
+pub fn next_version(input: impl Read) -> Result<String, String> {
+    use crate::verified_recipe::version_order;
+    let request: VersionPlan = read(input)?;
+    let floor = components(&request.floor)?;
+    let Some(version) = request.latest else {
+        return Ok(request.floor);
+    };
+    let latest = components(&version)?;
+    if version_order::above(floor, latest) {
+        return Ok(request.floor);
+    }
+    let digits = version_order::increment(latest[2]);
+    let patch = std::str::from_utf8(&digits).map_err(|e| e.to_string())?;
+    let (prefix, _) = version.rsplit_once('.').ok_or("invalid release version")?;
+    Ok(format!("{prefix}.{patch}"))
+}
