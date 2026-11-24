@@ -1,0 +1,86 @@
+{
+  "schema_version": 2,
+  "status": "active",
+  "owners": [
+    "host",
+    "host-release",
+    "host-release-tests"
+  ],
+  "projects": [
+    {
+      "id": "host-release",
+      "kind": "production",
+      "manifest": "crates/host-release/Cargo.toml",
+      "lockfile": "crates/host-release/Cargo.lock",
+      "root": "crates/host-release",
+      "test_project": "host-release-tests",
+      "actions": {
+        "verify_recipe": {
+          "operation": "verify.release-recipe",
+          "tool": "verus",
+          "argv": [
+            "--crate-type=lib",
+            "--no-cheating",
+            "--no-external-by-default",
+            "--num-threads",
+            "2",
+            "--output-json",
+            "--compile",
+            "--emit=link=.chrono-harness/state/verify.release-recipe.rlib,dep-info=.chrono-harness/state/verify.release-recipe.rlib.d",
+            "crates/host-release/src/verified_recipe.rs",
+            "-o",
+            ".chrono-harness/state/verify.release-recipe.rlib",
+            "-Zchecksum-hash-algorithm=sha256"
+          ],
+          "output_contract": {
+            "version": "0.2026.04.24.f8e1704",
+            "commit": "f8e17045c4ac17a02e566b8997070f2eecc255be"
+          }
+        }
+      },
+      "language": "rust"
+    },
+    {
+      "id": "host-release-tests",
+      "kind": "test",
+      "manifest": "crates/host-release-tests/Cargo.toml",
+      "lockfile": "crates/host-release-tests/Cargo.lock",
+      "root": "crates/host-release-tests",
+      "tests_for": "host-release",
+      "actions": {
+        "verify_recipe": {
+          "operation": "verify.release-recipe-tests",
+          "tool": "verus",
+          "argv": [
+            "--crate-type=lib",
+            "--no-cheating",
+            "--no-external-by-default",
+            "--num-threads",
+            "2",
+            "--output-json",
+            "--compile",
+            "--emit=link=.chrono-harness/state/verify.release-recipe-tests.rlib,dep-info=.chrono-harness/state/verify.release-recipe-tests.rlib.d",
+            "crates/host-release-tests/tests/verified_recipe.rs",
+            "-o",
+            ".chrono-harness/state/verify.release-recipe-tests.rlib",
+            "-Zchecksum-hash-algorithm=sha256"
+          ],
+          "output_contract": {
+            "version": "0.2026.04.24.f8e1704",
+            "commit": "f8e17045c4ac17a02e566b8997070f2eecc255be"
+          }
+        },
+        "execute": {
+          "operation": "host-release.owner-check",
+          "tool": "bash",
+          "argv": [
+            "./check.sh",
+            "--native"
+          ]
+        }
+      },
+      "language": "rust"
+    }
+  ],
+  "scripts": []
+}
