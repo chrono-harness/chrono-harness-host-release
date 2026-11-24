@@ -31,7 +31,22 @@ fn read<T: serde::de::DeserializeOwned>(mut input: impl Read) -> Result<T, Strin
 
 pub fn check(input: impl Read) -> Result<(), String> {
     let request: Request = read(input)?;
-    let run = request.run;
+    verify_check(
+        &request.run,
+        &request.repository,
+        &request.workflow,
+        &request.branch,
+        &request.sha,
+    )
+}
+
+fn verify_check(
+    run: &Value,
+    repository: &str,
+    workflow: &str,
+    branch: &str,
+    sha: &str,
+) -> Result<(), String> {
     let fields = [
         run["repository"]["full_name"].as_str(),
         run["head_repository"]["full_name"].as_str(),
@@ -42,19 +57,13 @@ pub fn check(input: impl Read) -> Result<(), String> {
         run["status"].as_str(),
         run["conclusion"].as_str(),
     ];
-    let workflow_path = format!(".github/workflows/{}", request.workflow);
-    if landed_push(
-        &fields,
-        &request.repository,
-        &workflow_path,
-        &request.branch,
-        &request.sha,
-    ) {
+    let workflow_path = format!(".github/workflows/{workflow}");
+    if landed_push(&fields, repository, &workflow_path, branch, sha) {
         Ok(())
     } else {
         Err(format!(
             "unexpected GitHub run for {} on {} at {}",
-            workflow_path, request.branch, request.sha
+            workflow_path, branch, sha
         ))
     }
 }
@@ -299,6 +308,177 @@ pub fn consumer_pin(input: impl Read) -> Result<Value, String> {
             Ok(serde_json::json!([format!("v{pin}"), checksums]))
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OriginRequest {
+    repository: String,
+    binary: String,
+    source: String,
+    workflow: String,
+    check_id: u64,
+    check_attempt: u64,
+    check: Value,
+    run_id: u64,
+    current_attempt: u64,
+    workflow_sha: String,
+    macos: PlatformOrigin,
+    linux: PlatformOrigin,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PlatformOrigin {
+    selected_run: u64,
+    attempt: u64,
+    artifact_id: u64,
+    archive: String,
+    file: String,
+    downloaded: String,
+    run: Value,
+    jobs: Vec<Value>,
+    artifact: Value,
+}
+
+impl OriginRequest {
+    fn platform(&self, platform: &str, row: &PlatformOrigin) -> Result<(String, Value), String> {
+        use crate::verified_recipe::delivery::{
+            number_fields, positive, producing_attempt, promotion_artifact, promotion_run,
+            text_fields, valid_digest,
+        };
+        if !producing_attempt(
+            self.run_id,
+            row.selected_run,
+            row.attempt,
+            self.current_attempt,
+        ) || !positive(Some(row.artifact_id))
+        {
+            return Err(format!("invalid producing run or attempt for {platform}"));
+        }
+        let run = &row.run;
+        let run_numbers = [
+            (run["id"].as_u64(), self.run_id),
+            (run["run_attempt"].as_u64(), row.attempt),
+        ];
+        let run_texts = [
+            (
+                run["repository"]["full_name"].as_str(),
+                self.repository.as_str(),
+            ),
+            (
+                run["head_repository"]["full_name"].as_str(),
+                self.repository.as_str(),
+            ),
+            (run["path"].as_str(), ".github/workflows/release.yml"),
+            (run["head_branch"].as_str(), "dev"),
+            (run["head_sha"].as_str(), self.workflow_sha.as_str()),
+            (run["event"].as_str(), "workflow_run"),
+        ];
+        if !promotion_run(
+            &run_numbers,
+            &run_texts,
+            run["event"].as_str(),
+            run["head_sha"].as_str().map(str::as_bytes),
+        ) {
+            return Err("different release workflow or producing attempt".into());
+        }
+        let name = format!("Build {platform}");
+        let job = row
+            .jobs
+            .iter()
+            .rev()
+            .find(|job| job["name"].as_str() == Some(name.as_str()))
+            .ok_or_else(|| format!("missing product build on {platform}"))?;
+        let steps: Vec<_> = job["steps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|step| (step["name"].as_str(), step["conclusion"].as_str()))
+            .collect();
+        if !positive(job["id"].as_u64())
+            || !number_fields(&[
+                (job["run_id"].as_u64(), self.run_id),
+                (job["run_attempt"].as_u64(), row.attempt),
+            ])
+            || ![
+                "Build and exercise the release binary",
+                "Upload the exercised binary",
+            ]
+            .iter()
+            .all(|step| {
+                acceptance_job(
+                    job["name"].as_str(),
+                    &name,
+                    job["conclusion"].as_str(),
+                    job["head_sha"].as_str(),
+                    &self.workflow_sha,
+                    &steps,
+                    step,
+                )
+            })
+        {
+            return Err(format!(
+                "missing successful product build or upload for {platform}"
+            ));
+        }
+        let a = &row.artifact;
+        let archive = row.archive.strip_prefix("sha256:").unwrap_or(&row.archive);
+        let digest = format!("sha256:{archive}");
+        let artifact_name = format!("{platform}-{}-{}", self.source, row.attempt);
+        if !valid_digest(archive)
+            || !promotion_artifact(
+                a["id"].as_u64(),
+                Some(row.artifact_id),
+                a["expired"].as_bool(),
+                a["size_in_bytes"].as_u64(),
+                &[(a["workflow_run"]["id"].as_u64(), self.run_id)],
+                &[
+                    (a["name"].as_str(), &artifact_name),
+                    (a["workflow_run"]["head_sha"].as_str(), &self.workflow_sha),
+                    (a["digest"].as_str(), &digest),
+                ],
+            )
+        {
+            return Err(format!("different original build artifact for {platform}"));
+        }
+        let filename = format!("{}-{platform}", self.binary);
+        if !valid_digest(&row.file) || !text_fields(&[(Some(&row.file), &row.downloaded)]) {
+            return Err(format!("downloaded bytes differ from build for {filename}"));
+        }
+        let record = serde_json::json!({"run": self.run_id, "attempt": row.attempt, "job": job["id"],
+              "artifact": row.artifact_id, "archive_sha256": a["digest"], "file_sha256": row.downloaded});
+        Ok((filename, record))
+    }
+}
+
+pub fn binary_origins(input: impl Read) -> Result<Value, String> {
+    use crate::verified_recipe::delivery::{number_fields, positive};
+    let request: OriginRequest = read(input)?;
+    verify_check(
+        &request.check,
+        &request.repository,
+        &request.workflow,
+        "dev",
+        &request.source,
+    )?;
+    if !positive(Some(request.check_id))
+        || !positive(Some(request.check_attempt))
+        || !number_fields(&[
+            (request.check["id"].as_u64(), request.check_id),
+            (request.check["run_attempt"].as_u64(), request.check_attempt),
+        ])
+    {
+        return Err("different check attempt".into());
+    }
+    let builds = [
+        request.platform("macos-aarch64", &request.macos)?,
+        request.platform("linux-x86_64", &request.linux)?,
+    ]
+    .into_iter()
+    .collect::<serde_json::Map<_, _>>();
+    Ok(serde_json::json!({"source":request.source,
+        "check":{"run":request.check_id,"attempt":request.check_attempt},"builds":builds}))
 }
 
 #[derive(Deserialize)]

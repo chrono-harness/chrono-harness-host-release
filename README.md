@@ -21,6 +21,8 @@
 
 `template-consumer-pin-v1` 从下游已落地清单判定安装版本，成功返回 JSON 数组 `[tag, checksums]`。Copier 请求提供 `kind="copier"`、`repository`、`version`、`rolling` 和解析后的 `answers`，源模板产物的 checksums 为 null。二进制请求提供 `kind="binary"`、`repository`、`version`、`binary` 和 mise 的 `tool` 对象。返回对应 Linux x86_64 与 macOS arm64 安装资产的完整名称和 SHA-256。调用方从该宿主选定提交读取 YAML 或 TOML，随后以返回的标签和摘要核对公开发行。
 
+`template-binary-origins-v1` 从标准输入读取发布者的两个平台观察。根据固定 check、来源 SHA、release run/attempt、构建和上传步骤、artifact ID 与归档、文件 SHA-256 输出来源记录。同一 run 重试时可沿用较早且已经成功的平台作业。GitHub API 的读取与下载，以及下载文件的摘要计算，由发布适配器负责。
+
 `template-latest-stable-v1` 从标准输入读取所有页的 GitHub Release 行组成的 JSON 数组，返回规范正式标签（例如 `"v1.10.0"`）或 `null`。选择只需要 tag_name、draft、prerelease、published_at。版本按三个规范十进制分量比较；发布适配器负责读取全部页并核对所选 Git 标签的提交。
 
 `template-next-version-v1` 接受一个 JSON 对象，例如 `{"floor":"0.1.2","latest":"0.1.11"}`，返回 JSON 字符串 `"0.1.12"`。首次发布传 `latest: null`。后续版本取计划下限与上一正式版本的下一补丁版中较大的版本。三个十进制分量允许任意位数并使用规范 SemVer 拼写。

@@ -135,6 +135,11 @@ pub fn promotion_artifact(id: Option<u64>, selected: Option<u64>, expired: Optio
         && (selected.is_none() || id == selected) && number_fields(numbers) && text_fields(texts)
 }
 
+/// An upload from an earlier attempt of this release run can be reused.
+pub fn producing_attempt(run: u64, selected: u64, attempt: u64, current: u64) -> (valid: bool)
+    ensures valid == (0 < run && selected == run && 0 < attempt <= current),
+{ run > 0 && selected == run && attempt > 0 && attempt <= current }
+
 pub open spec fn positive_spec(value: Option<u64>) -> bool {
     value is Some && value.unwrap() > 0
 }

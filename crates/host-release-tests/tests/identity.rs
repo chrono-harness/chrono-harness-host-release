@@ -453,3 +453,64 @@ fn source_release_inventory_selects_the_largest_public_canonical_version() {
     rows.reverse();
     assert_eq!(select(rows).as_deref(), Some(larger.as_str()));
 }
+
+#[test]
+fn platform_origins_reuse_only_the_earlier_successful_build_of_the_same_run() {
+    use chrono_host_release::template_run::binary_origins;
+    use serde_json::{Value, json};
+    let sha = "a".repeat(40);
+    let workflow_sha = "b".repeat(40);
+    let repo = "owner/release";
+    let build = |platform: &str, attempt: u64, id: u64| {
+        let file = "c".repeat(64);
+        let archive = "d".repeat(64);
+        json!({
+            "selected_run":5,"attempt":attempt,"artifact_id":id,"archive":archive,
+            "file":file,"downloaded":file,
+            "run":{"id":5,"run_attempt":attempt,"repository":{"full_name":repo},
+                "head_repository":{"full_name":repo},"event":"workflow_run","path":".github/workflows/release.yml",
+                "head_branch":"dev","head_sha":workflow_sha},
+            "jobs":[{"id":id+100,"run_id":5,"run_attempt":attempt,"name":format!("Build {platform}"),
+                "conclusion":"success","head_sha":workflow_sha,"steps":[
+                    {"name":"Build and exercise the release binary","conclusion":"success"},
+                    {"name":"Upload the exercised binary","conclusion":"success"}]}],
+            "artifact":{"id":id,"expired":false,"size_in_bytes":1,"name":format!("{platform}-{sha}-{attempt}"),
+                "workflow_run":{"id":5,"head_sha":workflow_sha},"digest":format!("sha256:{archive}")}
+        })
+    };
+    let valid = json!({"repository":repo,"binary":"product","source":sha,"workflow":"check.yml",
+        "check_id":3,"check_attempt":2,"check":{"id":3,"run_attempt":2,"repository":{"full_name":repo},
+        "head_repository":{"full_name":repo},"head_branch":"dev","head_sha":sha,"event":"push",
+        "path":".github/workflows/check.yml","status":"completed","conclusion":"success"},
+        "workflow_sha":workflow_sha,"run_id":5,"current_attempt":2,
+        "macos":build("macos-aarch64",2,21),"linux":build("linux-x86_64",1,20)});
+    let submit = |v: &Value| binary_origins(serde_json::to_vec(v).unwrap().as_slice());
+    let result = submit(&valid).unwrap();
+    assert_eq!(result["builds"]["product-linux-x86_64"]["attempt"], 1);
+    assert_eq!(result["builds"]["product-macos-aarch64"]["job"], 121);
+    for (path, bad) in [
+        ("/linux", valid["macos"].clone()),
+        ("/check/id", json!(4)),
+        ("/check/run_attempt", json!(1)),
+        ("/check/head_sha", json!(workflow_sha)),
+        ("/linux/attempt", json!(3)),
+        ("/linux/selected_run", json!(4)),
+        ("/linux/run/repository/full_name", json!("another/repo")),
+        ("/linux/run/event", json!("workflow_dispatch")),
+        ("/linux/run/run_attempt", json!(2)),
+        ("/linux/jobs/0/head_sha", json!(sha)),
+        ("/linux/jobs/0/run_attempt", json!(2)),
+        ("/linux/jobs/0/steps/1/conclusion", json!("skipped")),
+        ("/linux/artifact/id", json!(21)),
+        (
+            "/linux/artifact/digest",
+            json!(format!("sha256:{}", "e".repeat(64))),
+        ),
+        ("/linux/downloaded", json!("a".repeat(64))),
+        ("/linux/artifact/expired", json!(true)),
+    ] {
+        let mut changed = valid.clone();
+        *changed.pointer_mut(path).unwrap() = bad;
+        assert!(submit(&changed).is_err(), "{path}");
+    }
+}
