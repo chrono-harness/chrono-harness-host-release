@@ -1,5 +1,5 @@
 //! 只采集已登记失败目录和原生失败标记；两者共用有限内容容量。
-use chrono_harness::{no_symlink_parents, relative_path};
+use crate::files::{no_symlink_parents, relative_path};
 use serde_json::{Value, json};
 use std::{
     fs::{self, File, OpenOptions},
@@ -72,7 +72,7 @@ impl Collector<'_> {
                 return Ok(());
             }
             relative_path(destination)?;
-            let target = chrono_harness::prepare_publication(self.output, destination)?;
+            let target = crate::files::prepare_publication(self.output, destination)?;
             let mut target = OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -83,7 +83,7 @@ impl Collector<'_> {
                 .and_then(|()| target.flush())
                 .map_err(|e| e.to_string())?;
             self.used += raw.len() as u64;
-            record = json!({"source":relative,"status":"retained","path":destination,"bytes":raw.len(),"sha256":chrono_harness::sha256(&raw)});
+            record = json!({"source":relative,"status":"retained","path":destination,"bytes":raw.len(),"sha256":crate::files::sha256(&raw)});
             Ok(())
         })();
         if let Err(failure) = result {

@@ -13,6 +13,8 @@ pub fn compiler_names() -> (names: [&'static str; 2])
 }
 }
 #[cfg(not(verus_keep_ghost))]
+use crate::files::{file_identity, no_symlink_parents};
+#[cfg(not(verus_keep_ghost))]
 use crate::{
     evidence, frontend, process,
     receipt::{self, Kind, Lineage, Verified},
@@ -20,8 +22,6 @@ use crate::{
     staging::Staging,
     transport, verified_recipe as policy,
 };
-#[cfg(not(verus_keep_ghost))]
-use chrono_harness::{file_identity, no_symlink_parents};
 #[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
 #[cfg(not(verus_keep_ghost))]
@@ -265,7 +265,7 @@ impl<'a> Execution<'a> {
             .environment
             .iter()
             .filter(|(key, _)| {
-                key.as_os_str() != std::ffi::OsStr::new(chrono_harness::process_fds::ENV)
+                key.as_os_str() != std::ffi::OsStr::new(crate::observed::DESCRIPTORS)
             })
             .map(|(key, value)| {
                 Ok((
@@ -294,14 +294,14 @@ impl<'a> Execution<'a> {
             let path = std::env::join_paths(paths).map_err(error)?;
             environment.insert("PATH".into(), path.to_string_lossy().into_owned());
         }
-        let command = chrono_harness::CommandSpec {
+        let command = crate::observed::CommandSpec {
             program: program.clone(),
             args: args.to_vec(),
             env: environment,
             timeout_seconds: timeout
                 .as_secs()
                 .saturating_add(u64::from(timeout.subsec_nanos() != 0)),
-            output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
+            output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
         };
         let index = self.report["processes"]
             .as_array()
@@ -478,7 +478,7 @@ impl<'a> Execution<'a> {
         file.write_all(&raw)
             .and_then(|()| file.flush())
             .map_err(error)?;
-        self.report["dependency_input"] = json!({"path":"dependency-context.json","size":raw.len(),"sha256":chrono_harness::sha256(&raw),"source":if local {"local-outcomes"} else {"native-needs"}});
+        self.report["dependency_input"] = json!({"path":"dependency-context.json","size":raw.len(),"sha256":crate::files::sha256(&raw),"source":if local {"local-outcomes"} else {"native-needs"}});
         self.report["lineage"] = json!(lineage);
         self.report["selected"] = json!(selected.units);
         self.report["frontend_selection"] = json!(selected.frontend);
@@ -743,14 +743,14 @@ fn retain_original(
     }
     for (name, declaration) in &declarations {
         let source = receipt::original(&verified.directory, declaration)?;
-        let destination = chrono_harness::prepare_publication(&target, name)?;
+        let destination = crate::files::prepare_publication(&target, name)?;
         let mut input = fs::File::open(source).map_err(error)?;
         let mut output = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(destination)
             .map_err(error)?;
-        let (sha, size) = chrono_harness::copy_hashed(&mut input, &mut output)?;
+        let (sha, size) = crate::files::copy_hashed(&mut input, &mut output)?;
         output.flush().map_err(error)?;
         if declaration["sha256"] != sha || declaration["size"] != size {
             return Err(error("original selected evidence changed during retention"));
@@ -950,8 +950,8 @@ fn units(execution: &mut Execution<'_>, lineage: &Lineage) -> Result<(), String>
         Scope::Collect => {
             let metadata = &loaded.recipe.collector.dependency_metadata;
             let raw = fs::read(no_symlink_parents(&execution.root, metadata)?).map_err(error)?;
-            if chrono_harness::json(&raw)?
-                != chrono_harness::json(
+            if crate::codec::json(&raw)?
+                != crate::codec::json(
                     env(&execution.environment, "CHRONO_RELEASE_DEPENDENCIES")?.as_bytes(),
                 )?
             {
@@ -969,7 +969,7 @@ fn units(execution: &mut Execution<'_>, lineage: &Lineage) -> Result<(), String>
                 .write_all(&raw)
                 .and_then(|()| retained.flush())
                 .map_err(error)?;
-            execution.report["dependency_file"] = json!({"path":"dependency-file.json","size":raw.len(),"sha256":chrono_harness::sha256(&raw),"source_path":metadata});
+            execution.report["dependency_file"] = json!({"path":"dependency-file.json","size":raw.len(),"sha256":crate::files::sha256(&raw),"source_path":metadata});
             for unit in &loaded.recipe.units {
                 if unit.operation().is_none() {
                     continue;

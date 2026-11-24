@@ -64,10 +64,13 @@ pub fn query<T: DeserializeOwned>(
             );
         }
     }
-    let search = env.get("PATH").ok_or("missing PATH for bootstrap query")?;
-    let exe = chrono_harness::resolve_program(root, "chrono-host-bootstrap", Some(search))?;
-    let digest = chrono_harness::file_identity(&exe)?.0;
-    let spec = chrono_harness::CommandSpec {
+    let search = env
+        .get("PATH")
+        .ok_or("missing PATH for bootstrap query")?
+        .clone();
+    let exe = crate::files::resolve_program(root, "chrono-host-bootstrap", Some(&search))?;
+    let digest = crate::files::file_identity(&exe)?.0;
+    let spec = crate::observed::CommandSpec {
         program: exe
             .to_str()
             .ok_or("bootstrap executable path must be UTF-8")?
@@ -75,10 +78,21 @@ pub fn query<T: DeserializeOwned>(
         args: vec!["original-report-v1".into()],
         env,
         timeout_seconds,
-        output_limit_bytes: chrono_harness::verified_limits::MAX_OUTPUT_BYTES,
+        output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
     };
     let bytes = serde_json::to_vec(request).map_err(|e| e.to_string())?;
-    let result = chrono_harness::run_process_observed(root, &spec, &bytes, &digest)?;
+    let result = crate::observed::observe_with_search(
+        root,
+        &spec,
+        &bytes,
+        &digest,
+        std::time::Duration::from_secs(timeout_seconds),
+        Some(&search),
+        crate::observed::ProcessForward {
+            stdout: &mut std::io::sink(),
+            stderr: &mut std::io::sink(),
+        },
+    )?;
     if let Some(e) = result.failure {
         return Err(e);
     }
@@ -86,10 +100,10 @@ pub fn query<T: DeserializeOwned>(
         return Err(format!(
             "bootstrap original report exited {}: {}",
             result.exit_code,
-            result.stderr.trim_end()
+            String::from_utf8_lossy(&result.stderr_bytes).trim_end()
         ));
     }
-    chrono_harness::decode(&result.stdout_bytes)
+    crate::codec::decode(&result.stdout_bytes)
 }
 
 pub fn native_platform(timeout_seconds: u64) -> Result<NativePlatform, String> {

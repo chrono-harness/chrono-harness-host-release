@@ -62,7 +62,7 @@ mod native {
             raw: &[u8],
             context: &Value,
         ) -> Result<Option<Self>, String> {
-            let needs = chrono_harness::json(raw)?;
+            let needs = crate::codec::json(raw)?;
             let rows = needs.as_object().ok_or("invalid release needs")?;
             if lineage.kind != Kind::Github || !rows.values().any(|row| row["result"] == "skipped")
             {
@@ -90,16 +90,16 @@ mod native {
                 .packages
                 .get(platform)
                 .ok_or("unregistered recovery platform")?;
-            let directory = chrono_harness::no_symlink_parents(root, &package.directory)?;
-            let bytes = fs::read(chrono_harness::no_symlink_parents(
+            let directory = crate::files::no_symlink_parents(root, &package.directory)?;
+            let bytes = fs::read(crate::files::no_symlink_parents(
                 &directory,
                 "preview.json",
             )?)
             .map_err(|e| e.to_string())?;
-            if chrono_harness::sha256(&bytes) != digest {
+            if crate::files::sha256(&bytes) != digest {
                 return Err("preview decision differs from selected frontend".into());
             }
-            let decision = chrono_harness::json(&bytes)?;
+            let decision = crate::codec::json(&bytes)?;
             if decision["schema"] != "chrono-release-preview-plan/v1"
                 || decision["platform"] != *platform
                 || decision["current"] != context["release_identity"]
@@ -128,17 +128,17 @@ mod native {
             unit: &Unit,
             origin: &Origin,
         ) -> Result<receipt::Verified, String> {
-            let directory = chrono_harness::no_symlink_parents(
+            let directory = crate::files::no_symlink_parents(
                 &self.directory,
                 &format!("originals/{}", unit.id()),
             )?;
-            let bytes = fs::read(chrono_harness::no_symlink_parents(
+            let bytes = fs::read(crate::files::no_symlink_parents(
                 &directory,
                 "receipt.json",
             )?)
             .map_err(|e| e.to_string())?;
-            let sha256 = chrono_harness::sha256(&bytes);
-            let receipt = chrono_harness::json(&bytes)?;
+            let sha256 = crate::files::sha256(&bytes);
+            let receipt = crate::codec::json(&bytes)?;
             if sha256 != origin.receipt_sha256
                 || receipt["unit"] != unit.value()
                 || receipt["context"]["release_identity"] != serde_json::json!(origin.release)
@@ -169,7 +169,7 @@ mod native {
                 return Err("restored member path differs from current release plan".into());
             }
             let expected = crate::transport::ExecutableIdentity::from_receipt(identity)?;
-            let path = chrono_harness::no_symlink_parents(
+            let path = crate::files::no_symlink_parents(
                 &self.directory,
                 &format!("{asset}-{}", self.suffix),
             )?;
@@ -196,12 +196,12 @@ mod native {
                 .path
                 .strip_prefix(".chrono-harness/state/")
                 .ok_or("landing original outside collection state")?;
-            let file = chrono_harness::no_symlink_parents(collection, relative)?;
+            let file = crate::files::no_symlink_parents(collection, relative)?;
             let bytes = fs::read(file).map_err(|e| e.to_string())?;
-            if chrono_harness::sha256(&bytes) != self.sha256 {
+            if crate::files::sha256(&bytes) != self.sha256 {
                 return Err(format!("landing original digest differs: {}", self.path));
             }
-            chrono_harness::json(&bytes)
+            crate::codec::json(&bytes)
         }
     }
 
@@ -321,7 +321,7 @@ mod native {
             || context["base"] != answer.evidence.base
             || !crate::verified_recipe::delivery::valid_release_oid(answer.evidence.base.as_bytes())
             || answer.evidence.candidate != candidate
-            || chrono_harness::wire::digest(&answer.evidence.global_selected)?
+            || crate::codec::digest(&answer.evidence.global_selected)?
                 != detection["selection_sha256"]
         {
             return Err("landing judge decision differs".into());
@@ -352,7 +352,7 @@ mod native {
                 &source.source_commit,
                 &source.source_tree,
             )?;
-            let read = |path: &str| chrono_harness::json(&fixed.read(path)?);
+            let read = |path: &str| crate::codec::json(&fixed.read(path)?);
             let loaded = Loaded::load_from(root, read)?;
             let projects = read(&loaded.recipe.projects)?;
             let mut build_owners = BTreeMap::new();
@@ -571,7 +571,7 @@ mod native {
             .promotion
             .as_ref()
             .ok_or("missing original workflow")?;
-        let workflow: Value = chrono_harness::json(&fixed.read(&promotion.workflow_config)?)?;
+        let workflow: Value = crate::codec::json(&fixed.read(&promotion.workflow_config)?)?;
         let path = workflow["workflow_path"]
             .as_str()
             .ok_or("missing previous workflow path")?;
@@ -589,8 +589,7 @@ mod native {
         )?;
         let head = run["head_sha"].as_str().ok_or("missing workflow head")?;
         if run["head_branch"] != config.publication.branch
-            || (head != previous.source_commit
-                && chrono_harness::facts::blob(root, head, path)? != fixed.read(path)?)
+            || (head != previous.source_commit && fixed.read_at(head, path)? != fixed.read(path)?)
         {
             return Err("previous workflow differs from the released source".into());
         }
@@ -729,7 +728,7 @@ mod native {
             .iter()
             .map(|(job, origin)| (job.clone(), origin.selection.clone()))
             .collect();
-        let package_root = chrono_harness::no_symlink_parents(root, &package.directory)?;
+        let package_root = crate::files::no_symlink_parents(root, &package.directory)?;
         let input = receipt::original(&package_root, &report["dependency_input"])?;
         let selected = receipt::select_retained(
             loaded,
@@ -753,66 +752,65 @@ mod native {
             if selected.job != *job {
                 return Err(format!("previous unit selected another job: {job}"));
             }
-            let directory = chrono_harness::no_symlink_parents(
+            let directory = crate::files::no_symlink_parents(
                 &package_root,
                 &format!("originals/{}", unit.id()),
             )?;
             let inherited = retained.get(job);
             let original_context;
             let inherited_parent;
-            let (source_recipe, source_producer, source_context, collector) = if let Some(origin) =
-                inherited
-            {
-                if origin.selection != selected
-                    || origin.release.channel != Channel::Preview
-                    || origin.collector.job != parent.job
-                    || origin.collector.run_id != selected.run_id
-                {
-                    return Err("previous collector retained a different original".into());
-                }
-                original_context =
-                    recipe::read_json(&directory, "receipt.json")?["context"].clone();
-                if original_context["release_identity"] != serde_json::json!(origin.release)
-                    || original_context["source_commit"] != origin.release.source_commit
-                    || original_context["source_tree"] != origin.release.source_tree
-                    || original_context["system"] != context["system"]
-                    || original_context["machine"] != context["machine"]
-                {
-                    return Err("retained producer source or platform differs".into());
-                }
-                let key = (
-                    origin.release.source_commit.clone(),
-                    origin.release.source_tree.clone(),
-                );
-                if let std::collections::btree_map::Entry::Vacant(entry) =
-                    previous_sources.entry(key.clone())
-                {
-                    let fixed = Committed::new(root, environment, &key.0, &key.1)?;
-                    let recipe =
-                        Loaded::load_from(root, |path| chrono_harness::json(&fixed.read(path)?))?;
-                    entry.insert(recipe);
-                }
-                let recipe = &previous_sources[&key];
-                inherited_parent = Lineage {
-                    kind: Kind::Github,
-                    job: origin.collector.job.clone(),
-                    run_id: origin.collector.run_id.clone(),
-                    attempt: origin.collector.attempt.clone(),
+            let (source_recipe, source_producer, source_context, collector) =
+                if let Some(origin) = inherited {
+                    if origin.selection != selected
+                        || origin.release.channel != Channel::Preview
+                        || origin.collector.job != parent.job
+                        || origin.collector.run_id != selected.run_id
+                    {
+                        return Err("previous collector retained a different original".into());
+                    }
+                    original_context =
+                        recipe::read_json(&directory, "receipt.json")?["context"].clone();
+                    if original_context["release_identity"] != serde_json::json!(origin.release)
+                        || original_context["source_commit"] != origin.release.source_commit
+                        || original_context["source_tree"] != origin.release.source_tree
+                        || original_context["system"] != context["system"]
+                        || original_context["machine"] != context["machine"]
+                    {
+                        return Err("retained producer source or platform differs".into());
+                    }
+                    let key = (
+                        origin.release.source_commit.clone(),
+                        origin.release.source_tree.clone(),
+                    );
+                    if let std::collections::btree_map::Entry::Vacant(entry) =
+                        previous_sources.entry(key.clone())
+                    {
+                        let fixed = Committed::new(root, environment, &key.0, &key.1)?;
+                        let recipe =
+                            Loaded::load_from(root, |path| crate::codec::json(&fixed.read(path)?))?;
+                        entry.insert(recipe);
+                    }
+                    let recipe = &previous_sources[&key];
+                    inherited_parent = Lineage {
+                        kind: Kind::Github,
+                        job: origin.collector.job.clone(),
+                        run_id: origin.collector.run_id.clone(),
+                        attempt: origin.collector.attempt.clone(),
+                    };
+                    (
+                        recipe,
+                        (&origin.release.source_commit, &origin.release.source_tree),
+                        &original_context,
+                        &inherited_parent,
+                    )
+                } else {
+                    (
+                        loaded,
+                        (&previous.source_commit, &previous.source_tree),
+                        context,
+                        &parent,
+                    )
                 };
-                (
-                    recipe,
-                    (&origin.release.source_commit, &origin.release.source_tree),
-                    &original_context,
-                    &inherited_parent,
-                )
-            } else {
-                (
-                    loaded,
-                    (&previous.source_commit, &previous.source_tree),
-                    context,
-                    &parent,
-                )
-            };
             let verified = receipt::read_at(
                 source_recipe,
                 directory,
@@ -923,7 +921,7 @@ mod native {
             &previous.source_commit,
             &previous.source_tree,
         )?;
-        let read = |path: &str| chrono_harness::json(&fixed.read(path)?);
+        let read = |path: &str| crate::codec::json(&fixed.read(path)?);
         let loaded = Loaded::load_from(root, read)?;
         let workflow = read(&registry.workflow_config)?;
         crate::delivery::promotion::read_preview_origin(
@@ -996,7 +994,7 @@ mod native {
             .map_err(|e| e.to_string())?
             .trim();
         let fixed = Committed::new(root, environment, base, tree)?;
-        let loaded = Loaded::load_from(root, |p| chrono_harness::json(&fixed.read(p)?))?;
+        let loaded = Loaded::load_from(root, |p| crate::codec::json(&fixed.read(p)?))?;
         let mut original = environment.clone();
         original.insert("CHRONO_RELEASE_SOURCE".into(), base.into());
         original.insert("CHRONO_RELEASE_CI_RUN_ID".into(), run.into());
@@ -1097,7 +1095,7 @@ mod native {
             .as_ref()
             .ok_or("missing verified landing")?;
         let evidence = landing(
-            &chrono_harness::no_symlink_parents(root, collection)?,
+            &crate::files::no_symlink_parents(root, collection)?,
             &config.publication.repository,
             ci.run_id,
             ci.attempt,
@@ -1181,10 +1179,8 @@ mod native {
             report["recovery_started_ns"] = serde_json::json!(started_ns);
             if !origins.is_empty() {
                 let prepared = origin.as_ref().ok_or("missing recovered package")?;
-                let directory = chrono_harness::no_symlink_parents(
-                    root,
-                    &prepared.packages[platform].directory,
-                )?;
+                let directory =
+                    crate::files::no_symlink_parents(root, &prepared.packages[platform].directory)?;
                 store_record(root, &directory, "preview.json", &report)?;
             }
             store_record(root, output, &format!("{platform}.json"), &report)?;
@@ -1255,7 +1251,7 @@ mod native {
             .as_ref()
             .ok_or("missing verified landing CI")?;
         let evidence = landing(
-            &chrono_harness::no_symlink_parents(root, &request.collection)?,
+            &crate::files::no_symlink_parents(root, &request.collection)?,
             &config.publication.repository,
             ci.run_id,
             ci.attempt,
@@ -1271,7 +1267,7 @@ mod native {
                 return Err("repeated intermediate landing".into());
             }
             let bridge = landing(
-                &chrono_harness::no_symlink_parents(root, &link.collection)?,
+                &crate::files::no_symlink_parents(root, &link.collection)?,
                 &config.publication.repository,
                 link.run_id,
                 link.attempt,

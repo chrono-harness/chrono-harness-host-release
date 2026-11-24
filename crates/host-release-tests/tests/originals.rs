@@ -8,6 +8,13 @@ fn mock(root: &Path, name: &str) -> Environment {
         root.join(name),
     )
     .unwrap();
+    if name == "chrono-host-bootstrap" {
+        fs::copy(
+            env!("CARGO_BIN_EXE_chrono-release-query-mock"),
+            root.join("chrono-harness"),
+        )
+        .unwrap();
+    }
     [
         ("PATH".into(), root.as_os_str().to_owned()),
         ("GH_TOKEN".into(), "unused".into()),
@@ -50,6 +57,32 @@ fn report_query_preserves_stdin_diagnostics_and_isolates_unrelated_environment()
         } else {
             assert!(result.unwrap().is_empty());
         }
+    }
+}
+
+#[test]
+fn bootstrap_report_rejects_changed_or_incomplete_process_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let env = mock(root, "chrono-host-bootstrap");
+    let request = json!({"operation":"streams","report":"bound"});
+    for (fault, expected) in [
+        ("digest", "stream identity differs"),
+        ("child", "process identity differs"),
+        ("launcher", "process identity differs"),
+        ("truncated", "fill whole buffer"),
+        ("trailing", "trailing bytes"),
+    ] {
+        replies(
+            root,
+            &[(
+                &["original-report-v1"],
+                json!({"stdin":request,"stdout":"[]","stderr":"","exit":0,"fault":fault}),
+            )],
+        );
+        let result: Result<Vec<Value>, _> = bootstrap::query(root, &env, &request, 20);
+        let error = result.unwrap_err();
+        assert!(error.contains(expected), "{fault}: {error}");
     }
 }
 

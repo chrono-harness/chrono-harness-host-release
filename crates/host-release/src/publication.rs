@@ -82,7 +82,7 @@ impl Config {
         {
             return Err(error("invalid repository or landing workflow declaration"));
         }
-        chrono_harness::relative_path(&self.workflow_path)?;
+        crate::files::relative_path(&self.workflow_path)?;
         Ok(())
     }
 }
@@ -100,7 +100,7 @@ fn api(
         args.extend(["--input".into(), commands.body(&body)?]);
     }
     let reply = commands.execute("gh", &args)?;
-    let value: Value = chrono_harness::json(&reply.stdout)?;
+    let value: Value = crate::codec::json(&reply.stdout)?;
     match policy::api_outcome(
         reply.exit,
         value["status"].as_str(),
@@ -183,7 +183,7 @@ pub(crate) fn original_absence(
     {
         return false;
     }
-    let Ok(value) = chrono_harness::json(stdout) else {
+    let Ok(value) = crate::codec::json(stdout) else {
         return false;
     };
     policy::api_outcome(1, value["status"].as_str(), value["message"].as_str(), true) == 1

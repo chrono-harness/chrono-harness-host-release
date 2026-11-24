@@ -76,7 +76,7 @@ fn qualify(report: &Summary, identity: &ExecutableIdentity) -> Result<(), String
 
 #[cfg(not(verus_keep_ghost))]
 fn write(directory: &Path, relative: &str, raw: &[u8]) -> Result<Value, String> {
-    let path = chrono_harness::no_symlink_parents(directory, relative)?;
+    let path = crate::files::no_symlink_parents(directory, relative)?;
     fs::create_dir_all(path.parent().ok_or("missing original parent")?).map_err(error)?;
     let mut file = fs::OpenOptions::new()
         .write(true)
@@ -86,7 +86,7 @@ fn write(directory: &Path, relative: &str, raw: &[u8]) -> Result<Value, String> 
     file.write_all(raw)
         .and_then(|()| file.flush())
         .map_err(error)?;
-    Ok(json!({"path":relative,"size":raw.len(),"sha256":chrono_harness::sha256(raw)}))
+    Ok(json!({"path":relative,"size":raw.len(),"sha256":crate::files::sha256(raw)}))
 }
 
 #[cfg(not(verus_keep_ghost))]
@@ -353,7 +353,7 @@ pub fn validate(
         &identity,
     )?;
     if let Some(path) = executing {
-        let expected = chrono_harness::no_symlink_parents(directory, &declared.executable)?;
+        let expected = crate::files::no_symlink_parents(directory, &declared.executable)?;
         if fs::canonicalize(path).map_err(error)? != fs::canonicalize(expected).map_err(error)?
             || !same(&actual(path)?, &identity)
         {
@@ -371,8 +371,8 @@ pub fn metadata_files(
     directory: &Path,
     timeout_seconds: u64,
 ) -> Result<BTreeMap<String, Value>, String> {
-    let path = chrono_harness::no_symlink_parents(directory, "frontend.json")?;
-    let (sha256, size) = chrono_harness::file_identity(&path)?;
+    let path = crate::files::no_symlink_parents(directory, "frontend.json")?;
+    let (sha256, size) = crate::files::file_identity(&path)?;
     let manifest = crate::recipe::read_json(directory, "frontend.json")?;
     let raw = fs::read(receipt::original(directory, &manifest["bootstrap"])?).map_err(error)?;
     let streams: Vec<Value> = bootstrap::query(

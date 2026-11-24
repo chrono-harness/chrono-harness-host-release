@@ -3,14 +3,17 @@
 
 #[cfg(not(verus_keep_ghost))]
 pub mod bootstrap;
+mod codec;
 #[cfg(not(verus_keep_ghost))]
 pub mod committed;
 pub mod delivery;
 pub mod evidence;
 pub mod execution;
+mod files;
 pub mod frontend;
 pub mod identity;
 pub mod local;
+pub mod observed;
 pub mod process;
 pub mod publication;
 pub mod receipt;

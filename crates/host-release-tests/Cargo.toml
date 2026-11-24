@@ -6,6 +6,7 @@ publish = false
 autotests = false
 
 [dependencies]
+sha2 = "0.10"
 tempfile = "3"
 vstd = "=0.0.0-2026-04-20-1748"
 serde = { version = "1", features = ["derive"] }
