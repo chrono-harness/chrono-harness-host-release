@@ -56,7 +56,17 @@ fn main() -> ExitCode {
         }
         return ExitCode::SUCCESS;
     }
-    let key = serde_json::to_string(&args).unwrap();
+    let args = if args.first().map(String::as_str) == Some("exec-with-descriptors-v1") {
+        assert_eq!(
+            std::path::Path::new(&args[1]),
+            env::current_dir().unwrap().join("git")
+        );
+        assert!(env::var_os("CHRONO_PROCESS_FDS").is_some());
+        &args[2..]
+    } else {
+        &args[..]
+    };
+    let key = serde_json::to_string(args).unwrap();
     let reply = replies
         .get(&key)
         .unwrap_or_else(|| panic!("unexpected command {args:?}"));

@@ -8,13 +8,11 @@ fn mock(root: &Path, name: &str) -> Environment {
         root.join(name),
     )
     .unwrap();
-    if name == "chrono-host-bootstrap" {
-        fs::copy(
-            env!("CARGO_BIN_EXE_chrono-release-query-mock"),
-            root.join("chrono-harness"),
-        )
-        .unwrap();
-    }
+    fs::copy(
+        env!("CARGO_BIN_EXE_chrono-release-query-mock"),
+        root.join("chrono-harness"),
+    )
+    .unwrap();
     [
         ("PATH".into(), root.as_os_str().to_owned()),
         ("GH_TOKEN".into(), "unused".into()),
