@@ -47,6 +47,7 @@
 | `published` | `releases` 数组，每项含 `draft` 和 `published_at` | 已发布且有时间的条目的零基下标 |
 | `unassigned` | `issues` 数组，取 GitHub 的 `number/state/pull_request/milestone` | 可分配的 open issue 号码 |
 | `milestone` | `final_release` 布尔值、`open_issues` 非负整数 | `"closed"` 或 `"open"` |
+| `release-block` | `milestone` 编号、`original` 完整正文、`lines` 发行展示行数组 | 新的完整正文。替换首对发行标记之间的块；无标记时追加。缺一侧标记或首个结束标记在开始标记前时退出 2 |
 | `release-run` | 工作流的 `status/conclusion` | 是否需要查询该次运行的历史事项 |
 | `release-issue` | `status/conclusion/run_id` 和带 release-failure 标签的 `issues` 原件 | `{"action":"none/close/reopen/create","issue":号码或null}` |
 

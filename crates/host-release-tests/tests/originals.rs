@@ -189,6 +189,49 @@ fn roadmap_queries_use_github_objects_and_return_the_owned_issue_number() {
 }
 
 #[test]
+fn roadmap_release_block_preserves_text_outside_the_first_pair() {
+    use chrono_host_release::verified_recipe::roadmap::run;
+    let begin = "<!-- chrono-harness release -->";
+    let end = "<!-- /chrono-harness release -->";
+    let block = format!("{begin}\n测试版 🍃\n正式版\n{end}");
+    let request = |original: &str, lines: &[&str], output: &mut Vec<u8>| {
+        let body =
+            json!({"operation":"release-block","milestone":7,"original":original,"lines":lines});
+        run(serde_json::to_vec(&body).unwrap().as_slice(), output)
+    };
+    for (original, lines, expected) in [
+        (String::new(), vec![], format!("{begin}\n{end}")),
+        (
+            "前言\r\n".into(),
+            vec!["测试版 🍃", "正式版"],
+            format!("前言\r\n\n\n{block}"),
+        ),
+        (
+            format!("🍃{begin}{begin}old{end}尾{begin}原样{end}"),
+            vec!["测试版 🍃", "正式版"],
+            format!("🍃{block}尾{begin}原样{end}"),
+        ),
+        (block.clone(), vec!["测试版 🍃", "正式版"], block.clone()),
+    ] {
+        let mut output = Vec::new();
+        assert_eq!(request(&original, &lines, &mut output).unwrap(), 0);
+        assert_eq!(serde_json::from_slice::<String>(&output).unwrap(), expected);
+    }
+    for original in [
+        begin.to_string(),
+        end.to_string(),
+        format!("{end}{begin}{end}"),
+    ] {
+        let mut output = Vec::new();
+        assert_eq!(
+            request(&original, &[], &mut output).unwrap_err(),
+            "Incomplete release block in milestone 7"
+        );
+        assert!(output.is_empty());
+    }
+}
+
+#[test]
 fn installation_is_bound_to_this_launchers_entire_stdout_and_the_installed_bytes() {
     use chrono_host_release::{
         delivery::verify_installation_stdout,
