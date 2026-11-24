@@ -413,3 +413,43 @@ fn release_identifiers_and_digests_keep_their_distinct_wire_formats() {
     assert!(same_text("原始回执\0", "原始回执\0"));
     assert!(!same_text("é", "e\u{301}"));
 }
+
+#[test]
+fn source_release_inventory_selects_the_largest_public_canonical_version() {
+    use chrono_host_release::template_run::latest_stable;
+    use serde_json::json;
+
+    let row = |tag: &str, draft, preview, date: Option<&str>| json!({"tag_name":tag,"draft":draft,"prerelease":preview,"published_at":date});
+    let select = |rows: Vec<serde_json::Value>| {
+        latest_stable(serde_json::to_vec(&rows).unwrap().as_slice()).unwrap()
+    };
+    let mut rows = vec![
+        row("v9.9.9", true, false, Some("date")),
+        row("v8.0.0", false, true, Some("date")),
+        row("v7.0.0", false, false, None),
+        row("v6.0.0", false, false, Some("")),
+    ];
+    for invalid in [
+        "8.0.0",
+        "V8.0.0",
+        "v09.0.0",
+        "v1.2",
+        "v1.2.3.4",
+        "v1.2.3+build",
+        "v1.2.3-rc.1",
+        "v１.2.3",
+        "v1.2.3\n",
+    ] {
+        rows.push(row(invalid, false, false, Some("date")));
+    }
+    assert_eq!(select(Vec::new()), None);
+    assert_eq!(select(rows.clone()), None);
+    let large = format!("v2.{}.0", "9".repeat(5000));
+    let larger = format!("v2.1{}.0", "0".repeat(5000));
+    for tag in ["v1.99.999", "v2.0.0", &larger, &large, &larger] {
+        rows.push(row(tag, false, false, Some("date")));
+    }
+    assert_eq!(select(rows.clone()).as_deref(), Some(larger.as_str()));
+    rows.reverse();
+    assert_eq!(select(rows).as_deref(), Some(larger.as_str()));
+}

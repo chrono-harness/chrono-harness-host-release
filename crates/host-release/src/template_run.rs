@@ -175,3 +175,35 @@ pub fn release(input: impl Read) -> Result<(), String> {
         Err("release assets differ in names, upload state or checksums".into())
     }
 }
+
+#[derive(Deserialize)]
+struct ReleaseRow {
+    tag_name: String,
+    draft: bool,
+    prerelease: bool,
+    published_at: Option<String>,
+}
+
+pub fn latest_stable(input: impl Read) -> Result<Option<String>, String> {
+    use crate::verified_recipe::version_order;
+    let rows: Vec<ReleaseRow> = read(input)?;
+    let keys: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            let parts: Vec<_> = row
+                .tag_name
+                .strip_prefix('v')
+                .unwrap_or("")
+                .split('.')
+                .collect();
+            version_order::stable_key(
+                &row.tag_name,
+                &parts,
+                row.draft,
+                row.prerelease,
+                row.published_at.as_deref().unwrap_or(""),
+            )
+        })
+        .collect();
+    Ok(version_order::latest_stable(&keys).map(|index| rows[index].tag_name.clone()))
+}

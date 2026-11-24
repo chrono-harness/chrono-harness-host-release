@@ -4,6 +4,8 @@ use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 use vstd::slice::slice_to_vec;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
 
 verus! {
 
@@ -54,6 +56,95 @@ pub fn above(a: [&[u8];3], b: [&[u8];3]) -> (yes: bool)
     let minor=compare(a[1],b[1]);
     if minor != 0 { return minor > 0; }
     compare(a[2],b[2]) > 0
+}
+
+/// GitHub JSON and the leading-v split supply the observations. The original
+/// tag enters the ordering only when its publication fields and digits qualify.
+pub fn stable_key<'a>(
+    tag: &str, parts: &[&'a str], draft: bool, prerelease: bool, date: &str,
+) -> (key: Option<[&'a [u8]; 3]>)
+    ensures key.is_some() == (tag.spec_bytes().len() > 0 && tag.spec_bytes()[0] == 118
+        && !draft && !prerelease && date@.len() > 0 && parts.len() == 3
+        && forall|i: int| 0 <= i < parts.len() ==> super::delivery::decimal(parts@[i].spec_bytes(), true)),
+        key.is_some() ==> forall|i:int| 0 <= i < 3 ==> key.unwrap()[i]@ == parts@[i].spec_bytes(),
+{
+    let raw = tag.as_bytes();
+    if raw.is_empty() || raw[0] != 118 || prerelease || !super::roadmap::published(draft, date)
+        || !super::delivery::version_numbers(parts) {
+        return None;
+    }
+    Some([parts[0].as_bytes(), parts[1].as_bytes(), parts[2].as_bytes()])
+}
+
+proof fn earlier_transitive(a: Seq<u8>, b: Seq<u8>, c: Seq<u8>)
+    requires earlier(a,b), earlier(b,c),
+    ensures earlier(a,c),
+{
+    if a.len() == c.len() {
+        let i = choose|i:int| 0 <= i < a.len() && a[i] < b[i]
+            && forall|j:int| 0 <= j < i ==> a[j] == b[j];
+        let k = choose|k:int| 0 <= k < b.len() && b[k] < c[k]
+            && forall|j:int| 0 <= j < k ==> b[j] == c[j];
+        let first = if i <= k { i } else { k };
+        assert(0 <= first < a.len() && a[first] < c[first]);
+        assert forall|j:int| 0 <= j < first implies a[j] == c[j] by { }
+        assert(earlier(a,c));
+    }
+}
+
+proof fn above_transitive(a: [&[u8];3], b: [&[u8];3], c: [&[u8];3])
+    requires core_above(a,b), core_above(b,c),
+    ensures core_above(a,c),
+{
+    if earlier(c[0]@,b[0]@) && earlier(b[0]@,a[0]@) {
+        earlier_transitive(c[0]@,b[0]@,a[0]@);
+    } else if earlier(c[1]@,b[1]@) && earlier(b[1]@,a[1]@) {
+        earlier_transitive(c[1]@,b[1]@,a[1]@);
+    } else if earlier(c[2]@,b[2]@) && earlier(b[2]@,a[2]@) {
+        earlier_transitive(c[2]@,b[2]@,a[2]@);
+    }
+}
+
+/// A supplied page may be empty or contain no published canonical tag.
+/// Global input order and page boundaries do not affect the maximum version.
+pub fn latest_stable(keys: &[Option<[&[u8];3]>]) -> (best: Option<usize>)
+    ensures
+        best.is_none() == (forall|j:int| 0 <= j < keys.len() ==> keys@[j].is_none()),
+        best.is_some() ==> best.unwrap() < keys.len() && keys@[best.unwrap() as int].is_some(),
+        best.is_some() ==> forall|j:int| 0 <= j < keys.len() && keys@[j].is_some()
+            ==> !core_above(keys@[j].unwrap(),keys@[best.unwrap() as int].unwrap()),
+{
+    let mut best: Option<usize> = None;
+    let mut i = 0;
+    while i < keys.len()
+        invariant i <= keys.len(),
+            best.is_none() == (forall|j:int| 0 <= j < i ==> keys@[j].is_none()),
+            best.is_some() ==> best.unwrap() < i && keys@[best.unwrap() as int].is_some(),
+            best.is_some() ==> forall|j:int| 0 <= j < i && keys@[j].is_some()
+                ==> !core_above(keys@[j].unwrap(),keys@[best.unwrap() as int].unwrap()),
+        decreases keys.len() - i,
+    {
+        if let Some(key) = keys[i] {
+            if let Some(previous) = best {
+                let old = keys[previous].unwrap();
+                if above(key, old) {
+                    proof {
+                        assert forall|j:int| 0 <= j < i && keys@[j].is_some()
+                            implies !core_above(keys@[j].unwrap(), key) by {
+                            if core_above(keys@[j].unwrap(), key) {
+                                above_transitive(keys@[j].unwrap(), key, old);
+                            }
+                        }
+                    }
+                    best = Some(i);
+                }
+            } else {
+                best = Some(i);
+            }
+        }
+        i += 1;
+    }
+    best
 }
 
 // The returned prefix is unchanged, the last non-nine grows by one, and
