@@ -6,7 +6,7 @@
 
 [固定来源](https://github.com/ChronoAIProject/chrono-harness/tree/5f6892dfa2f73675a84e4ebdc3b06eb83b824d6e/crates/host-release)
 
-安装本仓清单固定的 chrono-judge-registration，并放入 PATH。发布配方从 execution-methods 读取登记方法；预览按固定提交读取登记字节，并从 test-owners 取得测试归属。
+安装本仓清单固定的 chrono-judge-registration，并放入 PATH。发布配方从 execution-methods 读取登记方法，预览按固定提交读取登记字节，并从 test-owners 取得测试归属。两项查询的子进程使用宿主所选 chrono-harness 所在的目录作为 PATH，以调用同一份 runner。
 
 本仓发行在 Linux x86_64 和 macOS arm64 分别构建。安装或回退时从同一标签读取二进制和 SHA256SUMS，核对对应平台摘要。
 

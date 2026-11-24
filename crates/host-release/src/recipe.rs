@@ -51,25 +51,34 @@ pub(crate) fn registration_view<T: serde::de::DeserializeOwned>(
     projects: &Value,
     timeout_seconds: u64,
 ) -> Result<T, String> {
-    registrations::query(view, projects, |program, argument, input| {
-        let executable = resolve_program(root, program, None)?;
-        let digest = crate::files::file_identity(&executable)?.0;
-        let spec = crate::observed::CommandSpec {
-            program: executable
-                .to_str()
-                .ok_or("invalid registration executable path")?
-                .into(),
-            args: vec![argument.to_owned()],
-            env: BTreeMap::new(),
-            timeout_seconds,
-            output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
-        };
-        let result = crate::observed::run_process_observed(root, &spec, input, &digest)?;
-        if let Some(failure) = result.failure {
-            return Err(failure);
-        }
-        Ok((result.exit_code, result.stdout_bytes, result.stderr_bytes))
-    })
+    let runner = resolve_program(root, "chrono-harness", None)?;
+    let runner_directory = runner
+        .parent()
+        .ok_or("runner has no executable directory")?;
+    registrations::query(
+        view,
+        projects,
+        runner_directory,
+        |program, argument, env, input| {
+            let executable = resolve_program(root, program, None)?;
+            let digest = crate::files::file_identity(&executable)?.0;
+            let spec = crate::observed::CommandSpec {
+                program: executable
+                    .to_str()
+                    .ok_or("invalid registration executable path")?
+                    .into(),
+                args: vec![argument.to_owned()],
+                env,
+                timeout_seconds,
+                output_limit_bytes: crate::observed::MAX_OUTPUT_BYTES,
+            };
+            let result = crate::observed::run_process_observed(root, &spec, input, &digest)?;
+            if let Some(failure) = result.failure {
+                return Err(failure);
+            }
+            Ok((result.exit_code, result.stdout_bytes, result.stderr_bytes))
+        },
+    )
 }
 
 #[cfg(not(verus_keep_ghost))]
