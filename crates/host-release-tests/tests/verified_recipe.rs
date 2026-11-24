@@ -54,6 +54,30 @@ fn fixed_series_requires_preview_and_rolling_accepts_stable(core: &str, parts: &
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn stable_and_adopted_preview_use_the_actual_release_relations() {
+    proof {
+        reveal_strlit("ahead"); reveal_strlit("behind"); reveal_strlit("identical"); reveal_strlit("diverged");
+        reveal_strlit("date"); reveal_strlit(""); reveal_strlit("other"); reveal_strlit("sha");
+        assert("date"@.len() != ""@.len()); assert("other"@.len() != "sha"@.len());
+        assert("ahead"@.len() != "behind"@.len()); assert("ahead"@.len() != "identical"@.len());
+        assert("diverged"@ != "identical"@) by { assert("diverged"@[0] != "identical"@[0]); }
+    }
+    expect_recipe(delivery::includes_base(Some("ahead")));
+    expect_recipe(!delivery::includes_base(Some("behind")));
+    expect_recipe(delivery::covered_candidate(Some("behind")) == Some(true));
+    expect_recipe(delivery::covered_candidate(Some("ahead")) == Some(false));
+    expect_recipe(delivery::covered_candidate(Some("diverged")).is_none());
+    expect_recipe(delivery::explicit_stable(Some("tag"),"tag",Some(false),Some(false),Some("date")) == Some(true));
+    expect_recipe(delivery::explicit_stable(Some("tag"),"tag",Some(true),Some(false),None) == Some(false));
+    expect_recipe(delivery::explicit_stable(Some("tag"),"tag",Some(false),Some(false),None).is_none());
+    proof { reveal_with_fuel(delivery::serial_digits, 3); }
+    expect_recipe(delivery::adopted_preview(Some("sha"),"sha","0","0",&[49],Some(1)));
+    expect_recipe(!delivery::adopted_preview(Some("other"),"sha","0","0",&[49],Some(1)));
+    expect_recipe(!delivery::adopted_preview(None,"sha","0","0",&[49],Some(2)));
+    expect_recipe(!delivery::adopted_preview(None,"sha","0","0",&[48,49],Some(1)));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn publication_replay_requires_an_existing_ref_and_all_assets() {
     expect_recipe(delivery::publication_state(false, 0, None, None, "sha", 1) == 0);
     expect_recipe(delivery::publication_state(true, 1, Some(true), None, "sha", 1) == 1);

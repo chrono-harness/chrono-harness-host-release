@@ -439,6 +439,61 @@ pub fn checksum_lines(expected: &[&str], observed: &[&str]) -> (valid: bool)
         && same_text(expected[0], observed[0]) && same_text(expected[1], observed[1])
 }
 
+/// The compare endpoint reports head relative to base. Only these two states allow a fast-forward.
+pub fn includes_base(status: Option<&str>) -> (yes: bool)
+    ensures yes == (text_pair((status, "identical")) || text_pair((status, "ahead"))),
+{
+    text_fields(&[(status, "identical")]) || text_fields(&[(status, "ahead")])
+}
+
+/// A candidate covered by the latest stable release is terminal. A later descendant can continue.
+pub fn covered_candidate(status: Option<&str>) -> (covered: Option<bool>)
+    ensures covered == (if text_pair((status, "identical")) || text_pair((status, "behind")) { Some(true) }
+                        else if text_pair((status, "ahead")) { Some(false) } else { None }),
+{
+    if text_fields(&[(status, "identical")]) || text_fields(&[(status, "behind")]) { Some(true) }
+    else if text_fields(&[(status, "ahead")]) { Some(false) } else { None }
+}
+
+/// A release at the exact stable tag can finish the explicit-version plan. Drafts remain eligible for retry.
+pub fn explicit_stable(tag: Option<&str>, expected: &str, draft: Option<bool>, preview: Option<bool>,
+    published: Option<&str>) -> (complete: Option<bool>)
+    ensures complete == (if !text_pair((tag, expected)) || draft.is_none() || preview.is_none() { None }
+        else if draft == Some(true) || preview == Some(true) { Some(false) }
+        else { match published { Some(s) if s@ != ""@ => Some(true), _ => None } }),
+{
+    if !text_fields(&[(tag, expected)]) || draft.is_none() || preview.is_none() { return None; }
+    if draft == Some(true) || preview == Some(true) { return Some(false); }
+    match published { Some(s) if !same_text(s,"") => Some(true), _ => None }
+}
+
+/// Digits up to end encode this positive number in canonical decimal.
+pub open spec fn serial_digits(digits: Seq<u8>, end: nat, number: u64) -> bool
+    decreases end,
+{
+    end > 0 && end <= digits.len() && number > 0 && digits[end - 1] == 48 + number % 10
+        && (if end == 1 { number < 10 } else { serial_digits(digits, (end - 1) as nat, number / 10) })
+}
+
+fn serial_matches(digits: &[u8], end: usize, number: u64) -> (valid: bool)
+    requires end <= digits.len(),
+    ensures valid == serial_digits(digits@, end as nat, number),
+    decreases end,
+{
+    if end == 0 || number == 0 || digits[end - 1] != 48 + (number % 10) as u8 { return false; }
+    if end == 1 { number < 10 } else { serial_matches(digits, end - 1, number / 10) }
+}
+
+/// The adopted preview series and canonical serial must match the selected source run.
+pub fn adopted_preview(main_check: Option<&str>, selected: &str, core: &str, version: &str,
+    serial: &[u8], run_number: Option<u64>) -> (valid: bool)
+    ensures valid == ((main_check.is_none() || text_pair((main_check, selected))) && core@ == version@
+        && match run_number { Some(n) => serial_digits(serial@, serial.len() as nat, n), None => false }),
+{
+    (main_check.is_none() || text_fields(&[(main_check, selected)])) && same_text(core, version)
+        && match run_number { Some(n) => serial_matches(serial, serial.len(), n), None => false }
+}
+
 pub fn draft_state(draft: Option<bool>, missing: usize) -> (action: u8)
     ensures action == match draft {
         Some(true) => 1u8,
