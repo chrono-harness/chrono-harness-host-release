@@ -68,8 +68,8 @@ fn verify_check(
     }
 }
 
-fn job_names(jobs: &[Value]) -> Vec<Option<&str>> {
-    jobs.iter().map(|job| job["name"].as_str()).collect()
+fn row_names(rows: &[Value]) -> Vec<Option<&str>> {
+    rows.iter().map(|row| row["name"].as_str()).collect()
 }
 
 pub fn acceptance(input: impl Read) -> Result<(), String> {
@@ -77,9 +77,9 @@ pub fn acceptance(input: impl Read) -> Result<(), String> {
     if !acceptance_declared(request.required_jobs.len(), &request.step) {
         return Err("missing consumer acceptance obligations".into());
     }
-    let names = job_names(&request.jobs);
+    let names = row_names(&request.jobs);
     for name in &request.required_jobs {
-        let index = crate::verified_recipe::delivery::last_job_named(&names, name)
+        let index = crate::verified_recipe::delivery::last_named(&names, name)
             .ok_or_else(|| format!("missing successful consumer on {name}"))?;
         let job = &request.jobs[index];
         let steps: Vec<_> = job["steps"]
@@ -334,19 +334,15 @@ fn install_asset<'a>(
     repository: &str,
     tag: &str,
     name: &str,
-    release: &'a Value,
+    assets: &'a [Value],
+    names: &[Option<&str>],
 ) -> Result<InstallAsset<'a>, String> {
-    use crate::verified_recipe::delivery::installed_download;
-    let assets = release["assets"]
-        .as_array()
-        .ok_or("missing release assets array")?;
-    let mut matches = assets.iter().filter(|a| a["name"].as_str() == Some(name));
-    let asset = matches
-        .next()
-        .ok_or_else(|| format!("{tag}: missing asset {name}"))?;
-    if matches.next().is_some() {
-        return Err(format!("{tag}: duplicate asset {name}"));
-    }
+    use crate::verified_recipe::delivery::{NamedAsset, installation_asset, uploaded_download};
+    let asset = match installation_asset(names, name) {
+        NamedAsset::Found(index) => &assets[index],
+        NamedAsset::Missing => return Err(format!("{tag}: missing asset {name}")),
+        NamedAsset::Duplicate => return Err(format!("{tag}: duplicate asset {name}")),
+    };
     let expected = format!("https://github.com/{repository}/releases/download/{tag}/{name}");
     let url = asset["browser_download_url"]
         .as_str()
@@ -354,9 +350,12 @@ fn install_asset<'a>(
     let checksum = asset["digest"]
         .as_str()
         .ok_or_else(|| format!("{tag}: missing SHA-256 for {name}"))?;
-    if asset["state"].as_str() != Some("uploaded")
-        || !installed_download(Some(url), &expected, checksum.strip_prefix("sha256:"))
-    {
+    if !uploaded_download(
+        asset["state"].as_str(),
+        Some(url),
+        &expected,
+        checksum.strip_prefix("sha256:"),
+    ) {
         return Err(format!("{tag}: invalid uploaded URL or SHA-256 for {name}"));
     }
     Ok(InstallAsset { url, checksum })
@@ -380,8 +379,24 @@ struct SelectedInstall<'a> {
 fn resolve_request(request: &InstallRequest) -> Result<SelectedInstall<'_>, String> {
     let row = install_release(&request.selector, &request.releases)?;
     let tag = row["tag_name"].as_str().ok_or("missing release tag")?;
-    let linux = install_asset(&request.repository, tag, &request.assets.linux, row)?;
-    let macos = install_asset(&request.repository, tag, &request.assets.macos, row)?;
+    let assets = row["assets"]
+        .as_array()
+        .ok_or("missing release assets array")?;
+    let names = row_names(assets);
+    let linux = install_asset(
+        &request.repository,
+        tag,
+        &request.assets.linux,
+        assets,
+        &names,
+    )?;
+    let macos = install_asset(
+        &request.repository,
+        tag,
+        &request.assets.macos,
+        assets,
+        &names,
+    )?;
     Ok(SelectedInstall {
         tag,
         version: tag.strip_prefix('v').unwrap_or(tag),
@@ -504,7 +519,7 @@ pub fn promotion(input: impl Read) -> Result<Value, String> {
         Promotion::Tag { tag, refs } => {
             let names: Vec<_> = refs.iter().map(|row| row["ref"].as_str()).collect();
             Ok(Value::Bool(
-                policy::last_job_named(&names, &format!("refs/tags/{tag}")).is_some(),
+                policy::last_named(&names, &format!("refs/tags/{tag}")).is_some(),
             ))
         }
         Promotion::Event {
@@ -755,7 +770,7 @@ impl OriginRequest {
             return Err("different release workflow or producing attempt".into());
         }
         let name = format!("Build {platform}");
-        let index = crate::verified_recipe::delivery::last_job_named(&job_names(&row.jobs), &name)
+        let index = crate::verified_recipe::delivery::last_named(&row_names(&row.jobs), &name)
             .ok_or_else(|| format!("missing product build on {platform}"))?;
         let job = &row.jobs[index];
         let steps: Vec<_> = job["steps"]

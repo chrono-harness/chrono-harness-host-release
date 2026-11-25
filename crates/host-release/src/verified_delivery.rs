@@ -57,8 +57,8 @@ pub fn landed_push(fields: &[Option<&str>; 8], repository: &str, workflow_path: 
     valid
 }
 
-/// GitHub supplies jobs in provider order. Use the final row carrying the exact name.
-pub fn last_job_named(names: &[Option<&str>], expected: &str) -> (found: Option<usize>)
+/// GitHub supplies jobs and release assets in provider order.
+pub fn last_named(names: &[Option<&str>], expected: &str) -> (found: Option<usize>)
     ensures match found {
         Some(i) => i < names.len() && text_pair((names@[i as int], expected))
             && forall|j: int| i < j < names.len() ==> !text_pair((#[trigger] names@[j], expected)),
@@ -75,6 +75,28 @@ pub fn last_job_named(names: &[Option<&str>], expected: &str) -> (found: Option<
         if text_fields(&[(names[end], expected)]) { return Some(end); }
     }
     None
+}
+
+pub enum NamedAsset { Missing, Duplicate, Found(usize) }
+
+/// The selected index must identify the only asset with the requested name.
+pub fn installation_asset(names: &[Option<&str>], requested: &str) -> (result: NamedAsset)
+    ensures match result {
+        NamedAsset::Missing => forall|i: int| 0 <= i < names.len() ==> !text_pair((#[trigger] names@[i], requested)),
+        NamedAsset::Duplicate => exists|i: int, j: int| 0 <= i < j < names.len()
+            && text_pair((names@[i], requested)) && text_pair((names@[j], requested)),
+        NamedAsset::Found(i) => i < names.len() && text_pair((names@[i as int], requested))
+            && forall|j: int| 0 <= j < names.len() && j != i ==> !text_pair((#[trigger] names@[j], requested)),
+    },
+{
+    let Some(i) = last_named(names, requested) else { return NamedAsset::Missing; };
+    let prefix = &names[..i];
+    if let Some(earlier) = last_named(prefix, requested) {
+        assert(text_pair((names@[earlier as int], requested)));
+        NamedAsset::Duplicate
+    } else {
+        NamedAsset::Found(i)
+    }
 }
 
 pub open spec fn exercised_step(steps: Seq<(Option<&str>, Option<&str>)>, step: &str) -> bool {
@@ -434,6 +456,15 @@ pub fn installed_download(url: Option<&str>, expected: &str, sha256: Option<&str
     text_fields(&[(url, expected)]) && match sha256 {
         Some(value) => valid_digest(value), None => false,
     }
+}
+
+pub fn uploaded_download(state: Option<&str>, url: Option<&str>, expected: &str, sha256: Option<&str>) -> (valid: bool)
+    ensures valid == (text_pair((state, "uploaded")) && text_pair((url, expected)) && match sha256 {
+        None => false,
+        Some(value) => value.spec_bytes().len() == 64 && lower_hex(value.spec_bytes()),
+    }),
+{
+    text_fields(&[(state, "uploaded")]) && installed_download(url, expected, sha256)
 }
 
 /// channel 的数字仅为适配器对既有枚举的无状态投影；3 表示拒绝。

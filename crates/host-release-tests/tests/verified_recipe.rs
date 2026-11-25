@@ -194,10 +194,10 @@ fn select_the_last_exact_job_in_provider_order() {
         assert("Build"@.len() != "Build again"@.len());
     }
     let rows = [Some("Build"), None, Some("Build again"), Some("Build"), None];
-    expect_recipe(delivery::last_job_named(&rows, "Build") == Some(3));
-    expect_recipe(delivery::last_job_named(&rows, "Build again") == Some(2));
-    expect_recipe(delivery::last_job_named(&[], "Build").is_none());
-    expect_recipe(delivery::last_job_named(&[None, Some("Build again")], "Build").is_none());
+    expect_recipe(delivery::last_named(&rows, "Build") == Some(3));
+    expect_recipe(delivery::last_named(&rows, "Build again") == Some(2));
+    expect_recipe(delivery::last_named(&[], "Build").is_none());
+    expect_recipe(delivery::last_named(&[None, Some("Build again")], "Build").is_none());
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
@@ -754,6 +754,21 @@ fn missing_future_or_foreign_producers_are_rejected() {
     let absent_run = policy::selected_producer(&DependencyResult::Success, "", "", 1, 2, "artifact");
     let absent_artifact = policy::selected_producer(&DependencyResult::Success, "run", "run", 1, 2, "");
     expect_recipe(!zero && !future && !foreign && !absent_run && !absent_artifact);
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
+fn installation_asset_identity_and_uploaded_state() {
+    use delivery::{installation_asset, uploaded_download, NamedAsset};
+    proof {
+        reveal_strlit("linux"); reveal_strlit("mac"); reveal_strlit("uploaded"); reveal_strlit("new");
+        assert("mac"@.len() != "linux"@.len()); assert("new"@.len() != "uploaded"@.len());
+    }
+    let names = [None, Some("mac"), Some("linux"), Some("mac")];
+    expect_recipe(matches!(installation_asset(&names, "linux"), NamedAsset::Found(2)));
+    expect_recipe(matches!(installation_asset(&names, "mac"), NamedAsset::Duplicate));
+    expect_recipe(matches!(installation_asset(&[], "mac"), NamedAsset::Missing));
+    expect_recipe(!uploaded_download(Some("new"), Some("URL"), "URL", Some("hash")));
+    expect_recipe(!uploaded_download(None, Some("URL"), "URL", Some("hash")));
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
