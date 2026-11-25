@@ -180,6 +180,20 @@ fn both_install_channels_break_joint_ties_by_original_tag(preview: bool, tag: st
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn pagination_continues_only_for_the_next_relation() {
+    use policy::version_order::next_release_page;
+    proof {
+        reveal_strlit("next"); reveal_strlit("last"); reveal_strlit("previous");
+        assert("last"@[0] != "next"@[0]);
+        assert("previous"@.len() != "next"@.len());
+    }
+    expect_recipe(!next_release_page(&[]));
+    expect_recipe(!next_release_page(&["previous", "last"]));
+    expect_recipe(next_release_page(&["last", "next"]));
+    expect_recipe(next_release_page(&["next", "previous"]));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn exact_install_selects_the_first_published_requested_tag() {
     use policy::version_order::exact_install;
     let rows = [

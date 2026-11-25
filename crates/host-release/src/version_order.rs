@@ -10,6 +10,22 @@ use vstd::string::StringSliceAdditionalSpecFns;
 
 verus! {
 
+/// GitHub supplies the relation names of the final release-page response.
+pub fn next_release_page(relations: &[&str]) -> (more: bool)
+    ensures more == (exists|i: int| 0 <= i < relations.len() && (#[trigger] relations@[i])@ == "next"@),
+{
+    let mut i = 0;
+    while i < relations.len()
+        invariant i <= relations.len(),
+            forall|j: int| 0 <= j < i ==> (#[trigger] relations@[j])@ != "next"@,
+        decreases relations.len() - i,
+    {
+        if super::same_text(relations[i], "next") { return true; }
+        i += 1;
+    }
+    false
+}
+
 /// The public channel must agree with both GitHub and the SemVer prerelease component.
 pub fn install_channel(preview: bool, github_prerelease: bool, version_prerelease: bool) -> (eligible: bool)
     ensures eligible == (preview == github_prerelease && preview == version_prerelease),

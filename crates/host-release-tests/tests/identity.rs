@@ -890,3 +890,15 @@ fn mise_installation_reads_all_original_pages_and_emits_one_tool() {
     );
     assert!(resolve_mise_tool("tool", "x/y", "stable", "one", "two", &pages).is_err());
 }
+
+#[test]
+fn github_release_pagination_uses_the_final_complete_response() {
+    use chrono_host_release::template_run::release_page_state;
+    let next = "lInK: <https://api.github.com/items?page=3>; rel=\"next\", <https://api.github.com/items?page=9>; rel=\"last\"";
+    assert!(release_page_state(&format!("HTTP/2 200\r\n{next}\r\n\r\n")).unwrap());
+    assert!(!release_page_state(&format!("HTTP/1.1 100 Continue\r\n{next}\r\n\r\nHTTP/2 200\r\nLink: <https://api.github.com/items?page=3>; rel=\"prev\"\r\n\r\n")).unwrap());
+    assert!(!release_page_state("HTTP/2 200\nContent-Type: application/json\n\n").unwrap());
+    for bad in ["", "HTTP/2 429\n", "HTTP/2 200\nLink: <url without terminator\n", "HTTP/2 200\nLink: <target>; rel=\"next\n"] {
+        assert!(release_page_state(bad).is_err());
+    }
+}

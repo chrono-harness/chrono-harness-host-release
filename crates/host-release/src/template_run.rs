@@ -417,6 +417,78 @@ pub fn resolve_install(input: impl Read) -> Result<Value, String> {
     serde_json::to_value(resolve_request(&request)?).map_err(|e| e.to_string())
 }
 
+/// Read curl's final response block. GitHub's release endpoint uses Link
+/// entries of the form <url>; rel="next", with comma-separated entries.
+pub fn release_page_state(headers: &str) -> Result<bool, String> {
+    let start = headers.rfind("\nHTTP/").map_or(0, |i| i + 1);
+    let mut lines = headers[start..].lines();
+    let status = lines
+        .next()
+        .and_then(|line| line.strip_prefix("HTTP/"))
+        .ok_or("missing GitHub response status")?;
+    let code = status
+        .split_ascii_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok());
+    if !matches!(code, Some(200..=299)) {
+        return Err("expected a successful GitHub response status".into());
+    }
+    let mut relations = Vec::new();
+    for line in lines.take_while(|line| !line.is_empty()) {
+        let Some((field, value)) = line.split_once(':') else {
+            continue;
+        };
+        if !field.eq_ignore_ascii_case("Link") {
+            continue;
+        }
+        // GitHub release URLs contain no literal '>'. Skip the complete URI
+        // before separating parameters so its query cannot be taken as rel.
+        let mut remaining = value.trim();
+        while !remaining.is_empty() {
+            let target = remaining
+                .strip_prefix('<')
+                .ok_or("invalid GitHub Link target")?;
+            let (_, tail) = target
+                .split_once('>')
+                .ok_or("unterminated GitHub Link target")?;
+            let (parameters, rest) = tail.split_once(',').unwrap_or((tail, ""));
+            let mut found = false;
+            for param in parameters
+                .split(';')
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+            {
+                let (name, value) = param
+                    .split_once('=')
+                    .ok_or("invalid GitHub Link parameter")?;
+                if name.trim().eq_ignore_ascii_case("rel") {
+                    let value = value.trim();
+                    let value = if value.starts_with('"') {
+                        value
+                            .strip_prefix('"')
+                            .and_then(|s| s.strip_suffix('"'))
+                            .ok_or("invalid quoted GitHub Link relation")?
+                    } else {
+                        value
+                    };
+                    if value.is_empty() {
+                        return Err("empty GitHub Link relation".into());
+                    }
+                    relations.extend(value.split_ascii_whitespace());
+                    found = true;
+                }
+            }
+            if !found {
+                return Err("missing GitHub Link relation".into());
+            }
+            remaining = rest.trim_start();
+        }
+    }
+    Ok(crate::verified_recipe::version_order::next_release_page(
+        &relations,
+    ))
+}
+
 pub fn resolve_mise_tool(
     command: &str,
     repository: &str,
