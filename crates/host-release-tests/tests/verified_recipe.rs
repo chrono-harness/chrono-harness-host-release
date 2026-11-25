@@ -193,11 +193,11 @@ fn exact_install_selects_the_first_published_requested_tag() {
         (Some(false), Some("date"), Some("v1.0.0")),
     ];
     proof {
-        reveal_strlit!("date");
-        reveal_strlit!("");
-        reveal_strlit!("v1.0.0");
-        reveal_strlit!("v1.0.0-alpha.1");
-        reveal_strlit!("v1.0.1");
+        reveal_strlit("date");
+        reveal_strlit("");
+        reveal_strlit("v1.0.0");
+        reveal_strlit("v1.0.0-alpha.1");
+        reveal_strlit("v1.0.1");
         assert forall|i:int| 0 <= i < rows.len() implies
             (policy::version_order::public_exact(#[trigger] rows@[i], "v1.0.0") == (i == 6 || i == 7))
             && (policy::version_order::public_exact(rows@[i], "v1.0.0-alpha.1") == (i == 4))
