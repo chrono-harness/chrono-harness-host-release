@@ -143,6 +143,24 @@ fn publication_replay_requires_an_existing_ref_and_all_assets() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn preview_prioritizes_publication_and_stable_prioritizes_semver() {
+    use std::cmp::Ordering::*;
+    use policy::version_order::install_precedence;
+    expect_recipe(matches!(install_precedence(true, Greater, Less, Less), Greater));
+    expect_recipe(matches!(install_precedence(true, Less, Greater, Greater), Less));
+    expect_recipe(matches!(install_precedence(false, Greater, Less, Greater), Less));
+    expect_recipe(matches!(install_precedence(false, Less, Greater, Less), Greater));
+    expect_recipe(matches!(install_precedence(true, Equal, Less, Greater), Less));
+    expect_recipe(matches!(install_precedence(false, Less, Equal, Greater), Less));
+}
+
+fn both_install_channels_break_joint_ties_by_original_tag(preview: bool, tag: std::cmp::Ordering) {
+    use std::cmp::Ordering::*;
+    let result = policy::version_order::install_precedence(preview, Equal, Equal, tag);
+    assert(result == tag);
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn install_channels_match_the_public_release_and_version_together() {
     use policy::version_order::install_channel;
     expect_recipe(install_channel(false, false, false));

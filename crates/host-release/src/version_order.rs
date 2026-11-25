@@ -4,6 +4,7 @@ use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 use vstd::slice::slice_to_vec;
+use std::cmp::Ordering;
 #[cfg(verus_keep_ghost)]
 use vstd::string::StringSliceAdditionalSpecFns;
 
@@ -194,4 +195,26 @@ pub fn increment(a: &[u8]) -> (out: Vec<u8>)
     assert(carried@ =~= seq![49u8] + digits@);
     carried
 }
+}
+
+verus! {
+
+/// GitHub timestamp and tag ordering are supplied by Rust; SemVer supplies the version comparison.
+pub fn install_precedence(preview: bool, date: Ordering, version: Ordering, tag: Ordering) -> (out: Ordering)
+    ensures out == if preview && date != Ordering::Equal { date }
+        else if version != Ordering::Equal { version }
+        else if date != Ordering::Equal { date }
+        else { tag },
+{
+    match (preview, date, version) {
+        (true, Ordering::Less, _) => Ordering::Less,
+        (true, Ordering::Greater, _) => Ordering::Greater,
+        (_, _, Ordering::Less) => Ordering::Less,
+        (_, _, Ordering::Greater) => Ordering::Greater,
+        (_, Ordering::Less, _) => Ordering::Less,
+        (_, Ordering::Greater, _) => Ordering::Greater,
+        _ => tag,
+    }
+}
+
 }
