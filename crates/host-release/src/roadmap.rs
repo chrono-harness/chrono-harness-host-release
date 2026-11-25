@@ -128,6 +128,18 @@ pub fn unassigned_issue(pull: bool, state: &str, has_milestone: bool) -> (assign
     ensures assign == (!pull && state@ == "open"@ && !has_milestone),
 { !pull && <&str>::exec_eq(state, "open") && !has_milestone }
 
+pub fn issue_destination<'a>(target: Option<&'a str>, final_index: Option<usize>) -> (title: &'a str)
+    ensures title@ == match (target, final_index) {
+        (Some(planned), None) => planned@,
+        _ => "Backlog"@,
+    },
+{
+    match (target, final_index) {
+        (Some(planned), None) => planned,
+        _ => "Backlog",
+    }
+}
+
 pub fn milestone_state(final_release: bool, open_issues: u64) -> (state: &'static str)
     ensures state@ == (if final_release && open_issues == 0 { "closed"@ } else { "open"@ }),
 { if final_release && open_issues == 0 { "closed" } else { "open" } }
@@ -303,6 +315,7 @@ enum Query {
     ReleaseSelection {
         releases: Vec<MilestoneRelease>,
         event_tag: Option<String>,
+        target: Option<String>,
         milestones: Vec<String>,
     },
     Unassigned {
@@ -347,6 +360,14 @@ struct MilestoneRelease {
 }
 
 #[cfg(not(verus_keep_ghost))]
+#[derive(Serialize)]
+struct ReleaseIndices {
+    #[serde(rename = "final")]
+    final_release: Option<usize>,
+    preview: Option<usize>,
+}
+
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 struct User {
     login: String,
@@ -368,113 +389,117 @@ struct Issue {
 pub fn run(input: impl std::io::Read, output: impl std::io::Write) -> Result<i32, String> {
     use serde_json::{json, to_writer};
     let query: Query = serde_json::from_reader(input).map_err(|e| e.to_string())?;
-    let result =
-        match query {
-            Query::Published { releases } => json!(
-                releases
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, r)| {
-                        published(r.draft, r.published_at.as_deref().unwrap_or("")).then_some(index)
-                    })
-                    .collect::<Vec<_>>()
-            ),
-            Query::ReleaseSelection {
-                releases,
-                event_tag,
-                milestones,
-            } => {
-                let rows: Vec<_> = releases
-                    .iter()
-                    .map(|r| ReleaseFacts {
-                        tag: r.tag_name.as_bytes(),
-                        date: r.published_at.as_deref().unwrap_or("").as_bytes(),
-                        draft: r.draft,
-                        preview: r.prerelease,
-                    })
-                    .collect();
-                let newest =
-                    select_release(&rows, Selection::Newest).map(|i| releases[i].tag_name.as_str());
-                let tag = event_or_newest(event_tag.as_deref(), newest);
-                let mut selected = serde_json::Map::new();
-                // The release event can create its milestone during this reconciliation.
-                let released_milestone = tag.and_then(|value| value.split('-').next());
-                for milestone in milestones
-                    .iter()
-                    .map(String::as_str)
-                    .chain(released_milestone)
-                {
-                    selected.insert(milestone.to_owned(), json!({
-                    "final": select_release(&rows, Selection::Final(milestone.as_bytes())),
-                    "preview": select_release(&rows, Selection::Preview(milestone.as_bytes())),
-                }));
-                }
-                json!({"tag":tag,"milestones":selected})
-            }
-            Query::Unassigned { issues } => json!(
-                issues
-                    .iter()
-                    .filter(|i| unassigned_issue(
-                        i.pull_request.is_some(),
-                        &i.state,
-                        i.milestone.is_some()
-                    ))
-                    .map(|i| i.number)
-                    .collect::<Vec<_>>()
-            ),
-            Query::Milestone {
-                final_release,
-                open_issues,
-            } => json!(milestone_state(final_release, open_issues)),
-            Query::ReleaseBlock {
-                milestone,
-                original,
-                lines,
-            } => {
-                let begin = "<!-- chrono-harness release -->";
-                let end = "<!-- /chrono-harness release -->";
-                let block = std::iter::once(begin)
-                    .chain(lines.iter().map(String::as_str))
-                    .chain(std::iter::once(end))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                let bytes = release_block(
-                    original.as_bytes(),
-                    begin.as_bytes(),
-                    end.as_bytes(),
-                    block.as_bytes(),
-                )
-                .ok_or_else(|| format!("Incomplete release block in milestone {milestone}"))?;
-                json!(String::from_utf8(bytes).map_err(|e| e.to_string())?)
-            }
-            Query::ReleaseRun { status, conclusion } => json!(!matches!(
-                release_result(&status, conclusion.as_deref().unwrap_or("")),
-                ReleaseResult::Unrelated
-            )),
-            Query::ReleaseIssue {
-                status,
-                conclusion,
-                run_id,
-                issues,
-            } => {
-                let marker = format!("<!-- chrono-harness release-run {run_id} -->");
-                let issue = issues.iter().find(|i| {
-                    owns_failure(
-                        i.pull_request.is_some(),
-                        i.user.as_ref().map_or("", |u| u.login.as_str()),
-                        i.body.as_deref().unwrap_or("").as_bytes(),
-                        marker.as_bytes(),
-                    )
+    let result = match query {
+        Query::Published { releases } => json!(
+            releases
+                .iter()
+                .enumerate()
+                .filter_map(|(index, r)| {
+                    published(r.draft, r.published_at.as_deref().unwrap_or("")).then_some(index)
+                })
+                .collect::<Vec<_>>()
+        ),
+        Query::ReleaseSelection {
+            releases,
+            event_tag,
+            target,
+            milestones,
+        } => {
+            let rows: Vec<_> = releases
+                .iter()
+                .map(|r| ReleaseFacts {
+                    tag: r.tag_name.as_bytes(),
+                    date: r.published_at.as_deref().unwrap_or("").as_bytes(),
+                    draft: r.draft,
+                    preview: r.prerelease,
+                })
+                .collect();
+            let newest =
+                select_release(&rows, Selection::Newest).map(|i| releases[i].tag_name.as_str());
+            let tag = event_or_newest(event_tag.as_deref(), newest);
+            let target = target.as_deref();
+            let mut selected = std::collections::BTreeMap::new();
+            // The release event can create its milestone during this reconciliation.
+            let released_milestone = tag.and_then(|value| value.split('-').next());
+            for milestone in milestones
+                .iter()
+                .map(String::as_str)
+                .chain(released_milestone)
+                .chain(target)
+            {
+                selected.entry(milestone).or_insert_with(|| ReleaseIndices {
+                    final_release: select_release(&rows, Selection::Final(milestone.as_bytes())),
+                    preview: select_release(&rows, Selection::Preview(milestone.as_bytes())),
                 });
-                let action = release_issue(
-                    &status,
-                    &conclusion,
-                    issue.map(|i| i.state.as_str()),
-                    issue.and_then(|i| i.state_reason.as_deref()).unwrap_or(""),
-                );
-                json!({"action":action,"issue":issue.map(|i| i.number)})
             }
-        };
+            let final_index = target.and_then(|planned| selected[planned].final_release);
+            let destination = issue_destination(target, final_index);
+            json!({"tag":tag,"milestones":selected,"destination":destination})
+        }
+        Query::Unassigned { issues } => json!(
+            issues
+                .iter()
+                .filter(|i| unassigned_issue(
+                    i.pull_request.is_some(),
+                    &i.state,
+                    i.milestone.is_some()
+                ))
+                .map(|i| i.number)
+                .collect::<Vec<_>>()
+        ),
+        Query::Milestone {
+            final_release,
+            open_issues,
+        } => json!(milestone_state(final_release, open_issues)),
+        Query::ReleaseBlock {
+            milestone,
+            original,
+            lines,
+        } => {
+            let begin = "<!-- chrono-harness release -->";
+            let end = "<!-- /chrono-harness release -->";
+            let block = std::iter::once(begin)
+                .chain(lines.iter().map(String::as_str))
+                .chain(std::iter::once(end))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let bytes = release_block(
+                original.as_bytes(),
+                begin.as_bytes(),
+                end.as_bytes(),
+                block.as_bytes(),
+            )
+            .ok_or_else(|| format!("Incomplete release block in milestone {milestone}"))?;
+            json!(String::from_utf8(bytes).map_err(|e| e.to_string())?)
+        }
+        Query::ReleaseRun { status, conclusion } => json!(!matches!(
+            release_result(&status, conclusion.as_deref().unwrap_or("")),
+            ReleaseResult::Unrelated
+        )),
+        Query::ReleaseIssue {
+            status,
+            conclusion,
+            run_id,
+            issues,
+        } => {
+            let marker = format!("<!-- chrono-harness release-run {run_id} -->");
+            let issue = issues.iter().find(|i| {
+                owns_failure(
+                    i.pull_request.is_some(),
+                    i.user.as_ref().map_or("", |u| u.login.as_str()),
+                    i.body.as_deref().unwrap_or("").as_bytes(),
+                    marker.as_bytes(),
+                )
+            });
+            let action = release_issue(
+                &status,
+                &conclusion,
+                issue.map(|i| i.state.as_str()),
+                issue.and_then(|i| i.state_reason.as_deref()).unwrap_or(""),
+            );
+            json!({"action":action,"issue":issue.map(|i| i.number)})
+        }
+    };
     to_writer(output, &result).map_err(|e| e.to_string())?;
     Ok(0)
 }
