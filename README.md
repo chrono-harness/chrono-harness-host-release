@@ -38,7 +38,7 @@
 
 调用方按固定的 tag 读取提交并用 `template-release-v1` 验证公开预览和资产。GitHub 的比较方向为 head 相对 base。晋升核对成功 dev push 的仓库、工作流、提交、实际正整数运行号和预览标签的规范十进制序号。GitHub 负责提供原始观察，更新 main 时仍须使用非强制快进。
 
-每次安装调用 `resolve-install-v1`，stdin JSON 提供 `repository`、`selector`（`stable`、`preview` 或精确标签）、`assets`（`linux-x64` 和 `macos-arm64` 的实际资产名）及 `releases`（该仓 GitHub REST 全部页的原始 Release 对象数组）。成功返回 `tag`、`version` 和两个平台的 `url`、`checksum`。渠道按 SemVer 选择已公开、非草稿且预发行标记一致的版本。版本优先级相同时按发布时间和标签文本排序。选中版本缺所需资产、上传状态、正确 URL 或 SHA-256 时退出 2。
+每次安装调用 `resolve-install-v1`，stdin JSON 提供 `repository`、`selector`（`stable`、`preview` 或精确标签）、`assets`（`linux-x64` 和 `macos-arm64` 的实际资产名）及 `releases`（该仓 GitHub REST 全部页的原始 Release 对象数组）。成功返回 `tag`、`version` 和两个平台的 `url`、`checksum`。通道只接受已公开、非草稿且 GitHub 预发行标记与 SemVer 一致的版本。`preview` 选择 GitHub UTC 发布时间最新的预发行，同秒并列按 SemVer 排序。`stable` 选择最高正式版本，同版本优先级按发布时间排序。两者最终并列时按标签文本排序。选中版本缺所需资产、上传状态、正确 URL 或 SHA-256 时退出 2。
 
 Shell 安装器可直接运行 `chrono-host-release resolve-install-v1 --mise-tool COMMAND OWNER/REPO SELECTOR LINUX_ASSET MACOS_ASSET PAGE_FILE...`。每个文件是一页原始 JSON 数组；完整读取后，stdout 给出该命令的 mise TOML 安装项。调用方负责从 GitHub 获取全部页，并使用同次返回的 URL 和摘要下载和校验各自的平台文件。
 
