@@ -42,6 +42,25 @@ mod tool_fixture;
 
 verus! {
 #[cfg(verus_keep_ghost)]
+fn retained_bytes_and_directory_boundaries(size: u64) {
+    use policy::evidence::{bytes_after_copy, group_status, nested_eligible};
+    let exact = bytes_after_copy(size, 0, size);
+    let full_empty = bytes_after_copy(size, size, 0);
+    let full_one = bytes_after_copy(size, size, 1);
+    assert(exact == Some(size) && full_empty == Some(size) && full_one.is_none());
+    let regular = nested_eligible(true, true, true, true);
+    let relative = nested_eligible(false, true, true, true);
+    let file = nested_eligible(true, false, true, true);
+    let child = nested_eligible(true, true, false, true);
+    let other_name = nested_eligible(true, true, true, false);
+    assert(regular && !relative && !file && !child && !other_name);
+    let complete = group_status(true, true);
+    let file_missing = group_status(true, false);
+    let source_unavailable = group_status(false, true);
+    assert(complete@ == "retained"@ && file_missing@ == "partial"@ && source_unavailable@ == "partial"@);
+}
+
+#[cfg(verus_keep_ghost)]
 fn pushed_tags_separate_stable_main_from_dev_and_refuse_empty_suffixes() {
     use policy::workflow_identity::{tag_branch, pushed_dev};
     let major=[118u8,48,49]; let minor=[50u8]; let patch=[51u8]; let suffix=[45u8,46,65];

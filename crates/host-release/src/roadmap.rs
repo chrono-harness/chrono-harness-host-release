@@ -197,7 +197,7 @@ fn matches_at(text: &[u8], marker: &[u8], index: usize) -> (found: bool)
     true
 }
 
-fn first_marker(text: &[u8], marker: &[u8]) -> (found: Option<usize>)
+pub(crate) fn first_marker(text: &[u8], marker: &[u8]) -> (found: Option<usize>)
     requires marker.len() > 0,
     ensures
         found.is_some() ==> first_at(text@, marker@, found.unwrap() as int),
