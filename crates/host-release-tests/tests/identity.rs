@@ -689,3 +689,45 @@ fn template_event_draft_and_main_observations_drive_writes() {
     q["reference"]["ref"] = json!("refs/heads/other");
     assert!(published(q).is_err());
 }
+
+#[test]
+fn publication_preserves_provider_order_and_sorted_missing_names() {
+    use chrono_host_release::template_run::publication;
+    use serde_json::{Value, json};
+
+    let sha = "a".repeat(40);
+    let digest = "b".repeat(64);
+    let decide = |rows: Value| {
+        let request = json!({
+            "kind":"state", "source":sha, "tag":"v1.2.0", "prerelease":false,
+            "assets":{"z":digest,"tool":digest,"a":digest},
+            "reference":{"ref":"refs/tags/v1.2.0","object":{"type":"commit","sha":sha}},
+            "release":{"id":1,"tag_name":"v1.2.0","prerelease":false,"draft":true,"assets":rows}
+        });
+        publication(serde_json::to_vec(&request).unwrap().as_slice())
+    };
+    let asset = json!({"name":"tool","state":"uploaded","digest":format!("sha256:{digest}")});
+    assert_eq!(
+        decide(json!([asset])).unwrap(),
+        json!({"action":"resume","create_tag":false,"missing":["a","z"]})
+    );
+    let bad_bytes =
+        json!({"name":"tool","state":"uploaded","digest":format!("sha256:{}", "c".repeat(64))});
+    for (rows, first_error) in [
+        (
+            json!([asset, asset, {}]),
+            "unexpected or duplicate existing asset",
+        ),
+        (json!([{}, asset, asset]), "missing asset name"),
+        (
+            json!([bad_bytes, {"name":"other"}]),
+            "existing release asset differs from selected bytes: tool",
+        ),
+        (
+            json!([{"name":"other"}, bad_bytes]),
+            "unexpected or duplicate existing asset",
+        ),
+    ] {
+        assert_eq!(decide(rows).unwrap_err(), first_error);
+    }
+}

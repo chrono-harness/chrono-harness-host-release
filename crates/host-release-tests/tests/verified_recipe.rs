@@ -89,6 +89,45 @@ fn stable_and_adopted_preview_use_the_actual_release_relations() {
     expect_recipe(!delivery::adopted_preview(None,"sha","0","0",&[48,49],Some(1)));
 }
 
+#[cfg(verus_keep_ghost)]
+fn a_correct_upload_consumes_only_its_name<A: delivery::PendingAssets>(
+    pending: &mut A, name: &str, digest: &str,
+)
+    requires
+        old(pending).pins().contains_key(name@),
+        old(pending).pins()[name@] == digest@,
+        digest.spec_bytes().len() == 64,
+        delivery::lower_hex(digest.spec_bytes()),
+{
+    let ghost original = pending.pins();
+    let rows = [(Some(name), Some("uploaded"), Some(digest))];
+    let result = delivery::consume_assets(pending, &rows);
+    proof {
+        reveal_with_fuel(delivery::remaining_after, 3);
+        assert(result is Ok);
+        assert(pending.pins() == original.remove(name@));
+    }
+}
+
+#[cfg(verus_keep_ghost)]
+fn a_duplicate_precedes_a_later_missing_name<A: delivery::PendingAssets>(
+    pending: &mut A, name: &str, digest: &str,
+)
+    requires
+        old(pending).pins().contains_key(name@),
+        old(pending).pins()[name@] == digest@,
+        digest.spec_bytes().len() == 64,
+        delivery::lower_hex(digest.spec_bytes()),
+{
+    let row = (Some(name), Some("uploaded"), Some(digest));
+    let rows = [row, row, (None, None, None)];
+    let result = delivery::consume_assets(pending, &rows);
+    proof {
+        reveal_with_fuel(delivery::remaining_after, 4);
+        assert(result matches Err((1, delivery::PublicationAssetError::UnexpectedName)));
+    }
+}
+
 #[cfg_attr(not(verus_keep_ghost), test)]
 fn publication_replay_requires_an_existing_ref_and_all_assets() {
     expect_recipe(delivery::publication_state(false, 0, None, None, "sha", 1) == 0);

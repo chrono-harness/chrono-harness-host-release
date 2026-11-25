@@ -235,6 +235,87 @@ pub fn uploaded_asset(expected: ExpectedAsset, actual: ObservedAsset) -> (valid:
     }
 }
 
+/// The publisher owns a BTreeMap keyed by asset name. A successful take
+/// returns the original pin and consumes exactly one key.
+pub trait PendingAssets {
+    spec fn pins(&self) -> Map<Seq<char>, Seq<char>>;
+
+    fn take(&mut self, name: &str) -> (pin: Option<String>)
+        ensures
+            self.pins() == old(self).pins().remove(name@),
+            match pin {
+                Some(value) => old(self).pins().contains_key(name@) && value@ == old(self).pins()[name@],
+                None => !old(self).pins().contains_key(name@),
+            };
+}
+
+pub open spec fn pinned_row(pins: Map<Seq<char>,Seq<char>>, row: ObservedAsset) -> bool {
+    match (row.0,row.2) {
+        (Some(name),Some(digest)) => pins.contains_key(name@) && digest@ == pins[name@]
+            && text_pair((row.1,"uploaded")) && digest.spec_bytes().len() == 64 && lower_hex(digest.spec_bytes()),
+        _ => false,
+    }
+}
+
+pub open spec fn remaining_after(pins: Map<Seq<char>,Seq<char>>, rows: Seq<ObservedAsset>, n: int)
+    -> Map<Seq<char>,Seq<char>>
+    decreases n,
+{
+    if n <= 0 || n > rows.len() { pins } else {
+        let previous = remaining_after(pins,rows,n-1);
+        match rows[n-1].0 { Some(name) => previous.remove(name@), None => previous }
+    }
+}
+
+pub enum PublicationAssetError {
+    MissingName,
+    UnexpectedName,
+    DifferentBytes,
+}
+
+pub fn consume_assets<A: PendingAssets>(pending: &mut A, rows: &[ObservedAsset])
+    -> (result: Result<(),(usize,PublicationAssetError)>)
+    ensures
+        match result {
+            Ok(()) => pending.pins() == remaining_after(old(pending).pins(),rows@,rows.len() as int)
+                && forall|j:int| 0 <= j < rows.len() ==>
+                    pinned_row(remaining_after(old(pending).pins(),rows@,j),#[trigger] rows@[j]),
+            Err((i,cause)) => i < rows.len()
+                && (forall|j:int| 0 <= j < i ==>
+                    pinned_row(remaining_after(old(pending).pins(),rows@,j),#[trigger] rows@[j]))
+                && match cause {
+                    PublicationAssetError::MissingName => rows@[i as int].0 is None,
+                    PublicationAssetError::UnexpectedName => rows@[i as int].0 is Some
+                        && !remaining_after(old(pending).pins(),rows@,i as int).contains_key(rows@[i as int].0.unwrap()@),
+                    PublicationAssetError::DifferentBytes => rows@[i as int].0 is Some
+                        && remaining_after(old(pending).pins(),rows@,i as int).contains_key(rows@[i as int].0.unwrap()@)
+                        && !pinned_row(remaining_after(old(pending).pins(),rows@,i as int),rows@[i as int]),
+                },
+        },
+{
+    let mut i=0;
+    while i < rows.len()
+        invariant
+            i <= rows.len(),
+            pending.pins() == remaining_after(old(pending).pins(),rows@,i as int),
+            forall|j:int| 0 <= j < i ==> pinned_row(remaining_after(old(pending).pins(),rows@,j),#[trigger] rows@[j]),
+        decreases rows.len()-i,
+    {
+        let row=rows[i];
+        let name=match row.0 {
+            Some(name)=>name, None=>return Err((i,PublicationAssetError::MissingName)),
+        };
+        let pin=match pending.take(name) {
+            Some(value)=>value, None=>return Err((i,PublicationAssetError::UnexpectedName)),
+        };
+        if !uploaded_asset((name,Some(pin.as_str())),row) {
+            return Err((i,PublicationAssetError::DifferentBytes));
+        }
+        i+=1;
+    }
+    Ok(())
+}
+
 /// The decoder sorts both lists by asset name and preserves every GitHub row.
 pub fn release_assets(expected: &[ExpectedAsset], actual: &[ObservedAsset]) -> (valid: bool)
     ensures valid == (expected.len() == actual.len() && forall|i: int| 0 <= i < expected.len()

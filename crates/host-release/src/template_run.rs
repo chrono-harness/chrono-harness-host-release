@@ -651,6 +651,14 @@ fn ref_status(reference: &Value, name: &str, source: &str) -> u8 {
     )
 }
 
+impl crate::verified_recipe::delivery::PendingAssets
+    for std::collections::BTreeMap<String, String>
+{
+    fn take(&mut self, name: &str) -> Option<String> {
+        self.remove(name)
+    }
+}
+
 pub fn publication(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery as policy;
     use serde_json::json;
@@ -741,21 +749,26 @@ pub fn publication(input: impl Read) -> Result<Value, String> {
                 {
                     return Err("existing release identity or channel differs".into());
                 }
-                for asset in release["assets"]
+                let assets = release["assets"]
                     .as_array()
-                    .ok_or("missing release assets array")?
-                {
-                    let row = crate::publication::observed_asset(asset);
-                    let name = row.0.ok_or("missing asset name")?;
-                    let expected = missing
-                        .remove(name)
-                        .ok_or("unexpected or duplicate existing asset")?;
-                    if !policy::uploaded_asset((name, Some(&expected)), row) {
-                        return Err(format!(
-                            "existing release asset differs from selected bytes: {name}"
-                        ));
+                    .ok_or("missing release assets array")?;
+                let rows: Vec<_> = assets
+                    .iter()
+                    .map(crate::publication::observed_asset)
+                    .collect();
+                policy::consume_assets(&mut missing, &rows).map_err(|(i, cause)| {
+                    use policy::PublicationAssetError;
+                    match cause {
+                        PublicationAssetError::MissingName => "missing asset name".to_owned(),
+                        PublicationAssetError::UnexpectedName => {
+                            "unexpected or duplicate existing asset".to_owned()
+                        }
+                        PublicationAssetError::DifferentBytes => format!(
+                            "existing release asset differs from selected bytes: {}",
+                            rows[i].0.unwrap()
+                        ),
                     }
-                }
+                })?;
             }
             let action = match policy::publication_state(
                 !release.is_null(),
