@@ -57,19 +57,18 @@ pub fn landed_push(fields: &[Option<&str>; 8], repository: &str, workflow_path: 
     valid
 }
 
-/// GitHub supplies jobs and release assets in provider order.
-pub fn last_named(names: &[Option<&str>], limit: usize, expected: &str) -> (found: Option<usize>)
-    requires limit <= names.len(),
+/// GitHub supplies jobs in provider order. Use the final row carrying the exact name.
+pub fn last_job_named(names: &[Option<&str>], expected: &str) -> (found: Option<usize>)
     ensures match found {
-        Some(i) => i < limit && text_pair((names@[i as int], expected))
-            && forall|j: int| i < j < limit ==> !text_pair((#[trigger] names@[j], expected)),
-        None => forall|j: int| 0 <= j < limit ==> !text_pair((#[trigger] names@[j], expected)),
+        Some(i) => i < names.len() && text_pair((names@[i as int], expected))
+            && forall|j: int| i < j < names.len() ==> !text_pair((#[trigger] names@[j], expected)),
+        None => forall|j: int| 0 <= j < names.len() ==> !text_pair((#[trigger] names@[j], expected)),
     },
 {
-    let mut end = limit;
+    let mut end = names.len();
     while end > 0
-        invariant end <= limit,
-            forall|j: int| end <= j < limit ==> !text_pair((#[trigger] names@[j], expected)),
+        invariant end <= names.len(),
+            forall|j: int| end <= j < names.len() ==> !text_pair((#[trigger] names@[j], expected)),
         decreases end,
     {
         end -= 1;
@@ -90,8 +89,9 @@ pub fn installation_asset(names: &[Option<&str>], requested: &str) -> (result: N
             && forall|j: int| 0 <= j < names.len() && j != i ==> !text_pair((#[trigger] names@[j], requested)),
     },
 {
-    let Some(i) = last_named(names, names.len(), requested) else { return NamedAsset::Missing; };
-    if let Some(earlier) = last_named(names, i, requested) {
+    let Some(i) = last_job_named(names, requested) else { return NamedAsset::Missing; };
+    let prefix = vstd::slice::slice_subrange(names, 0, i);
+    if let Some(earlier) = last_job_named(prefix, requested) {
         assert(text_pair((names@[earlier as int], requested)));
         NamedAsset::Duplicate
     } else {

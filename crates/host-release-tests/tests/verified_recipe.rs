@@ -194,10 +194,10 @@ fn select_the_last_exact_job_in_provider_order() {
         assert("Build"@.len() != "Build again"@.len());
     }
     let rows = [Some("Build"), None, Some("Build again"), Some("Build"), None];
-    expect_recipe(delivery::last_named(&rows, "Build") == Some(3));
-    expect_recipe(delivery::last_named(&rows, "Build again") == Some(2));
-    expect_recipe(delivery::last_named(&[], "Build").is_none());
-    expect_recipe(delivery::last_named(&[None, Some("Build again")], "Build").is_none());
+    expect_recipe(delivery::last_job_named(&rows, "Build") == Some(3));
+    expect_recipe(delivery::last_job_named(&rows, "Build again") == Some(2));
+    expect_recipe(delivery::last_job_named(&[], "Build").is_none());
+    expect_recipe(delivery::last_job_named(&[None, Some("Build again")], "Build").is_none());
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]

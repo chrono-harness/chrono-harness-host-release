@@ -79,7 +79,7 @@ pub fn acceptance(input: impl Read) -> Result<(), String> {
     }
     let names = row_names(&request.jobs);
     for name in &request.required_jobs {
-        let index = crate::verified_recipe::delivery::last_named(&names, names.len(), name)
+        let index = crate::verified_recipe::delivery::last_job_named(&names, name)
             .ok_or_else(|| format!("missing successful consumer on {name}"))?;
         let job = &request.jobs[index];
         let steps: Vec<_> = job["steps"]
@@ -519,7 +519,7 @@ pub fn promotion(input: impl Read) -> Result<Value, String> {
         Promotion::Tag { tag, refs } => {
             let names: Vec<_> = refs.iter().map(|row| row["ref"].as_str()).collect();
             Ok(Value::Bool(
-                policy::last_named(&names, names.len(), &format!("refs/tags/{tag}")).is_some(),
+                policy::last_job_named(&names, &format!("refs/tags/{tag}")).is_some(),
             ))
         }
         Promotion::Event {
@@ -770,7 +770,7 @@ impl OriginRequest {
             return Err("different release workflow or producing attempt".into());
         }
         let name = format!("Build {platform}");
-        let index = crate::verified_recipe::delivery::last_named(&row_names(&row.jobs), &name)
+        let index = crate::verified_recipe::delivery::last_job_named(&row_names(&row.jobs), &name)
             .ok_or_else(|| format!("missing product build on {platform}"))?;
         let job = &row.jobs[index];
         let steps: Vec<_> = job["steps"]
