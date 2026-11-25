@@ -25,8 +25,12 @@ features:
 - worktree
 - verus
 generate_check: false
+github_templates: true
 local_check_retention: true
+manage_roadmap: false
 project_guide: ''
+release_plan: {}
 repository: chrono-harness/chrono-harness-host-release
 required_check: check
+strict_host_adapters: {}
 
