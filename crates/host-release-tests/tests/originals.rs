@@ -167,14 +167,26 @@ fn roadmap_queries_use_github_objects_and_return_the_owned_issue_number() {
                 if tag == "v1.0.01-a" {
                     titles["v1.0.01"] = json!({"final":null,"preview":3});
                 }
-                json!({"tag":tag,"milestones":titles})
+                json!({"tag":tag,"milestones":titles,"destination":"Backlog"})
             }
         );
     }
     assert_eq!(
         query(json!({"operation":"release-selection","milestones":[],"releases":[]})),
-        json!({"tag":null,"milestones":{}})
+        json!({"tag":null,"milestones":{},"destination":"Backlog"})
     );
+    let releases = json!([
+        {"tag_name":"v2.0.0","draft":true,"published_at":"2026-01-04"},
+        {"tag_name":"v2.0.0-preview","draft":false,"prerelease":true,"published_at":"2026-01-03"},
+        {"tag_name":"v2.0.01","draft":false,"published_at":"2026-01-02"},
+        {"tag_name":"v3.0.0","draft":false,"published_at":"2026-01-01"}
+    ]);
+    for (target, expected) in [("v2.0.0", "v2.0.0"), ("v3.0.0", "Backlog")] {
+        let selection = query(json!({
+            "operation":"release-selection","target":target,"milestones":[],"releases":releases
+        }));
+        assert_eq!(selection["destination"], expected);
+    }
     let marker = "<!-- chrono-harness release-run 123 -->";
     let bot = json!({"login":"github-actions[bot]"});
     let history = json!([

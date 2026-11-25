@@ -280,7 +280,7 @@ fn milestone_release_selection_keeps_first_tie_and_last_final() {
 // 同一预期在 Verus 中证明，在普通 Rust 中实际执行。
 #[cfg_attr(not(verus_keep_ghost), test)]
 fn roadmap_uses_only_public_releases_unassigned_open_issues_and_completed_milestones() {
-    use policy::roadmap::{milestone_state,published,unassigned_issue};
+    use policy::roadmap::{issue_destination,milestone_state,published,unassigned_issue};
     proof {
         reveal_strlit(""); reveal_strlit("date"); reveal_strlit("open"); reveal_strlit("closed");
         assert("closed"@.len() != "open"@.len());
@@ -292,6 +292,9 @@ fn roadmap_uses_only_public_releases_unassigned_open_issues_and_completed_milest
     expect_recipe(!unassigned_issue(true,"open",false));
     expect_recipe(!unassigned_issue(false,"open",true));
     expect_recipe(!unassigned_issue(false,"closed",false));
+    expect_recipe(policy::same_text(issue_destination(None,None),"Backlog"));
+    expect_recipe(policy::same_text(issue_destination(Some("v2.0.0"),None),"v2.0.0"));
+    expect_recipe(policy::same_text(issue_destination(Some("v2.0.0"),Some(0)),"Backlog"));
     expect_recipe(policy::same_text(milestone_state(true,0),"closed"));
     expect_recipe(policy::same_text(milestone_state(true,1),"open"));
     expect_recipe(policy::same_text(milestone_state(false,0),"open"));
