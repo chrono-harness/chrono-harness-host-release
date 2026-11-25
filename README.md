@@ -6,11 +6,7 @@
 
 本地完整检查的固定汇总报告、准备输入和执行原件由 runner 保留 24 小时。最后一份成功报告到期，且读者与交接义务结束后，模板维护任务释放其引用，后续轮次回收原件。两组证明编译库及依赖清单位于 `release-proofs/`，供原生检查核对编译输入；整次检查持有工作树租约。工作树维护在取得排他租约后回收该批编译文件和专用的 `native-check/`。需要长期使用的结果应在窗口内复制到检出外。既有未登记目录由持有者核对并转存后显式接管。
 
-长期主检出在本机用户 crontab 登记每小时维护。将下列检出和 mise 路径替换为本机的绝对路径。两个命令依次维护已登记的检查报告与本地编译目录。
-
-```cron
-0 * * * * cd '/absolute/path/to/chrono-harness-host-release' && '/absolute/path/to/mise' run harness-maintain-checks && '/absolute/path/to/mise' exec -- chrono-worktree maintain
-```
+按宿主登记执行 `mise run harness-maintain-checks` 与 `mise exec -- chrono-worktree maintain`，分别处理检查结果和工作树产物。
 
 [固定来源](https://github.com/ChronoAIProject/chrono-harness/tree/5f6892dfa2f73675a84e4ebdc3b06eb83b824d6e/crates/host-release)
 
