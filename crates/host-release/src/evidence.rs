@@ -21,9 +21,9 @@ use verus_builtin_macros::verus;
 use vstd::prelude::*;
 use vstd::slice::slice_subrange;
 
+verus! {
 pub const BOUND: u64 = 64 * 1024 * 1024;
 
-verus! {
 /// The caller uses a single-line protocol marker. The first match selects the entire remainder of that line.
 pub(crate) open spec fn marker_value(stream: Seq<u8>, marker: Seq<u8>, value: Seq<u8>) -> bool {
     exists|i: int, end: int| roadmap::first_at(stream, marker, i)
