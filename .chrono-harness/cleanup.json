@@ -13,15 +13,27 @@
   },
   "artifacts": [
     {
-      "path": ".chrono-harness/state/",
-      "disposition": "finish-dispose"
+      "path": ".chrono-harness/state/release-proofs/",
+      "disposition": "dispose"
+    },
+    {
+      "path": ".chrono-harness/state/native-check/",
+      "disposition": "dispose"
     },
     {
       "path": ".chrono-harness/bin/",
       "disposition": "finish-dispose"
     },
     {
-      "path": "target/",
+      "path": ".chrono-harness/state/worktrees/",
+      "disposition": "finish-dispose"
+    },
+    {
+      "path": ".chrono-harness/state/local/",
+      "disposition": "finish-dispose"
+    },
+    {
+      "path": ".chrono-harness/state/origins/",
       "disposition": "finish-dispose"
     }
   ],
@@ -34,5 +46,6 @@
     "keep_seconds": 86400,
     "max_entries": 32,
     "max_bytes": 4194304
-  }
+  },
+  "main_cache_only": true
 }

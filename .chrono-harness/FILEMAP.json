@@ -125,6 +125,22 @@
       }
     },
     {
+      "path": ".chrono-harness/maintain-checks.json",
+      "owner": "host",
+      "surface": "product",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
+    },
+    {
       "path": ".chrono-harness/pr.json",
       "owner": "host",
       "surface": "product",
@@ -1120,6 +1136,7 @@
   "execution_plans": {
     "test:host-release-tests": {
       "operations": [
+        "prepare.release-proof-directory",
         "verify.release-recipe",
         "verify.release-recipe-tests",
         "host-release.owner-check"

@@ -4,12 +4,12 @@
 
 在仓库根目录运行 `mise exec -- ./check.sh`。本仓的 mise 配置固定 Verus 版本，检查按变更验证发布配方及其消费者。
 
-本地主检出的准备记录、执行原件和失败诊断保留 24 小时。时间从各原件登记的起点计算。维护会保全当前单元和汇总报告引用的原件，以及活跃读者使用的原件。报告被新结果替代、引用和读者均释放后，后续维护回收到期原件。需要长期使用的结果请在窗口内转存。采用政策前已有的原件没有登记，需按原生产者与使用方核对。
+本地完整检查的固定汇总报告、准备输入和执行原件由 runner 保留 24 小时。最后一份成功报告到期，且读者与交接义务结束后，模板维护任务释放其引用，后续轮次回收原件。两组证明编译库及依赖清单位于 `release-proofs/`，供原生检查核对编译输入；整次检查持有工作树租约。工作树维护在取得排他租约后回收该批编译文件和专用的 `native-check/`。需要长期使用的结果应在窗口内复制到检出外。既有未登记目录由持有者核对并转存后显式接管。
 
-已运行本仓检查并安装好工具的长期检出，可以把下列命令加入本机用户的 crontab，每小时维护一次。将路径替换为本机主检出的绝对路径。维护失败时退出非零，诊断写至标准错误。
+长期主检出在本机用户 crontab 登记每小时维护。将下列检出和 mise 路径替换为本机的绝对路径。两个命令依次维护已登记的检查报告与本地编译目录。
 
 ```cron
-0 * * * * cd '/absolute/path/to/chrono-harness-host-release' && PATH="$PWD/.chrono-harness/bin:$PATH" .chrono-harness/bin/chrono-worktree maintain >/dev/null
+0 * * * * cd '/absolute/path/to/chrono-harness-host-release' && '/absolute/path/to/mise' run harness-maintain-checks && '/absolute/path/to/mise' exec -- chrono-worktree maintain
 ```
 
 [固定来源](https://github.com/ChronoAIProject/chrono-harness/tree/5f6892dfa2f73675a84e4ebdc3b06eb83b824d6e/crates/host-release)
