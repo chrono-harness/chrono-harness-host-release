@@ -60,6 +60,12 @@ fn run() -> Result<i32, String> {
             chrono_host_release::template_run::acceptance(std::io::stdin().lock())?;
             Ok(0)
         },
+        [command, flag, headers] if command == "resolve-install-v1" && flag == "--page-state" => {
+            let raw = std::fs::read_to_string(headers).map_err(|e| format!("{headers}: {e}"))?;
+            let next = chrono_host_release::template_run::release_page_state(&raw)?;
+            println!("{}", if next { "next" } else { "done" });
+            Ok(0)
+        },
         [command, flag, binary, repo, selector, linux, macos, pages @ ..] if command == "resolve-install-v1" && flag == "--mise-tool" => {
             let tool = chrono_host_release::template_run::resolve_mise_tool(binary,repo,selector,linux,macos,pages)?;
             print!("{tool}");
