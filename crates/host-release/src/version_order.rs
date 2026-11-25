@@ -17,6 +17,39 @@ pub fn install_channel(preview: bool, github_prerelease: bool, version_prereleas
     preview == github_prerelease && preview == version_prerelease
 }
 
+/// Exact installations accept both stable and preview tags in their original page order.
+pub type InstallRelease<'a> = (Option<bool>, Option<&'a str>, Option<&'a str>);
+
+pub open spec fn public_exact(row: InstallRelease, requested: &str) -> bool {
+    row.0 == Some(false) && match (row.1, row.2) {
+        (Some(date), Some(tag)) => date@.len() > 0 && tag@ == requested@,
+        _ => false,
+    }
+}
+
+pub fn exact_install(rows: &[InstallRelease], requested: &str) -> (found: Option<usize>)
+    ensures match found {
+        Some(i) => i < rows.len() && public_exact(rows@[i as int], requested)
+            && forall|j: int| 0 <= j < i ==> !public_exact(#[trigger] rows@[j], requested),
+        None => forall|j: int| 0 <= j < rows.len() ==> !public_exact(#[trigger] rows@[j], requested),
+    },
+{
+    let mut i = 0;
+    while i < rows.len()
+        invariant i <= rows.len(),
+            forall|j: int| 0 <= j < i ==> !public_exact(#[trigger] rows@[j], requested),
+        decreases rows.len() - i,
+    {
+        if let (Some(draft), Some(date), Some(tag)) = rows[i] {
+            if super::roadmap::published(draft, date) && super::same_text(tag, requested) {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
 pub open spec fn earlier(a: Seq<u8>, b: Seq<u8>) -> bool {
     a.len() < b.len() || (a.len() == b.len()
         && exists|i: int| 0 <= i < a.len() && a[i] < b[i]
