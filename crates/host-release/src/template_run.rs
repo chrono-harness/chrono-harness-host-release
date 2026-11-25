@@ -281,6 +281,25 @@ impl<'a> InstallVersion<'a> {
 
 fn install_release<'a>(selector: &str, releases: &'a [Value]) -> Result<&'a Value, String> {
     use crate::verified_recipe::{roadmap::published, version_order::install_channel};
+    let preview = match selector {
+        "stable" => false,
+        "preview" => true,
+        tag => {
+            let rows: Vec<_> = releases
+                .iter()
+                .map(|r| {
+                    (
+                        r["draft"].as_bool(),
+                        r["published_at"].as_str(),
+                        r["tag_name"].as_str(),
+                    )
+                })
+                .collect();
+            return crate::verified_recipe::version_order::exact_install(&rows, tag)
+                .map(|index| &releases[index])
+                .ok_or_else(|| format!("no published release with exact tag {tag}"));
+        }
+    };
     let public =
         releases.iter().filter(
             |r| match (r["draft"].as_bool(), r["published_at"].as_str()) {
@@ -288,16 +307,6 @@ fn install_release<'a>(selector: &str, releases: &'a [Value]) -> Result<&'a Valu
                 _ => false,
             },
         );
-    let preview = match selector {
-        "stable" => false,
-        "preview" => true,
-        tag => {
-            return public
-                .into_iter()
-                .find(|r| r["tag_name"].as_str() == Some(tag))
-                .ok_or_else(|| format!("no published release with exact tag {tag}"));
-        }
-    };
     public
         .filter_map(|row| {
             let tag = row["tag_name"].as_str()?;

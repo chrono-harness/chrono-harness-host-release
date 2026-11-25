@@ -180,6 +180,25 @@ fn both_install_channels_break_joint_ties_by_original_tag(preview: bool, tag: st
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn exact_install_selects_the_first_published_requested_tag() {
+    use policy::version_order::exact_install;
+    let rows = [
+        (Some(true), Some("date"), Some("v1.0.0")),
+        (None, Some("date"), Some("v1.0.0")),
+        (Some(false), None, Some("v1.0.0")),
+        (Some(false), Some(""), Some("v1.0.0")),
+        (Some(false), Some("date"), Some("v1.0.0-alpha.1")),
+        (Some(false), Some("date"), None),
+        (Some(false), Some("date"), Some("v1.0.0")),
+        (Some(false), Some("date"), Some("v1.0.0")),
+    ];
+    expect_recipe(exact_install(&rows, "v1.0.0") == Some(6));
+    expect_recipe(exact_install(&rows, "v1.0.0-alpha.1") == Some(4));
+    expect_recipe(exact_install(&rows, "v1.0.1").is_none());
+    expect_recipe(exact_install(&[], "v1.0.0").is_none());
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn install_channels_match_the_public_release_and_version_together() {
     use policy::version_order::install_channel;
     expect_recipe(install_channel(false, false, false));
