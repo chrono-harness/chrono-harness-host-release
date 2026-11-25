@@ -655,6 +655,35 @@ fn a_pushed_tag_checks_only_the_branch_required_by_its_exact_grammar() {
 }
 
 #[test]
+fn template_version_policy_preserves_absent_and_malformed_fields() {
+    use chrono_host_release::template_run::promotion;
+    use serde_json::{Value, json};
+    let evaluate = |config: Value| {
+        let request = json!({"kind":"version-policy", "config":config});
+        promotion(serde_json::to_vec(&request).unwrap().as_slice())
+    };
+    assert_eq!(evaluate(json!({"kind":"binary"})).unwrap(), false);
+    assert_eq!(
+        evaluate(json!({"kind":"binary","version_policy":"explicit"})).unwrap(),
+        false
+    );
+    assert_eq!(
+        evaluate(json!({"kind":"copier","version_policy":"next_patch"})).unwrap(),
+        true
+    );
+    assert_eq!(
+        evaluate(json!({"kind":"binary","version_policy":"next_patch"})).unwrap_err(),
+        "next_patch requires a Copier source product"
+    );
+    for bad in [Value::Null, json!(true), json!(["next_patch"]), json!("")] {
+        assert_eq!(
+            evaluate(json!({"kind":"copier","version_policy":bad})).unwrap_err(),
+            "unsupported version policy"
+        );
+    }
+}
+
+#[test]
 fn template_event_draft_and_main_observations_drive_writes() {
     use chrono_host_release::template_run::{promotion, publication};
     use serde_json::{Value, json};

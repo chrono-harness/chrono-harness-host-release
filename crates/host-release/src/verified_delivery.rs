@@ -514,6 +514,25 @@ pub fn selected_ref(present: bool, reference: Option<&str>, expected_ref: &str,
     if text_fields(&[(reference, expected_ref), (kind, "commit"), (oid, source)]) { 1 } else { 2 }
 }
 
+pub enum VersionPolicy { Explicit, NextPatch, Unknown, WrongProduct }
+
+/// Only an omitted policy defaults to the version declared in the release configuration.
+pub fn version_policy(product: Option<&str>, present: bool, policy: Option<&str>) -> (out: VersionPolicy)
+    ensures
+        (out is Explicit) == (!present || text_pair((policy, "explicit"))),
+        (out is NextPatch) == (present && text_pair((policy, "next_patch")) && text_pair((product, "copier"))),
+        (out is WrongProduct) == (present && text_pair((policy, "next_patch")) && !text_pair((product, "copier"))),
+        (out is Unknown) == (present && !text_pair((policy, "explicit")) && !text_pair((policy, "next_patch"))),
+{
+    proof {
+        reveal_strlit("explicit"); reveal_strlit("next_patch");
+        assert("explicit"@.len() != "next_patch"@.len());
+    }
+    if !present || text_fields(&[(policy, "explicit")]) { return VersionPolicy::Explicit; }
+    if !text_fields(&[(policy, "next_patch")]) { return VersionPolicy::Unknown; }
+    if text_fields(&[(product, "copier")]) { VersionPolicy::NextPatch } else { VersionPolicy::WrongProduct }
+}
+
 /// Decide which source can drive a release before reading its configuration.
 pub enum ReleaseEvent { Dev, Main, Dispatch, WrongRepository, WrongBranch, WrongEvent }
 

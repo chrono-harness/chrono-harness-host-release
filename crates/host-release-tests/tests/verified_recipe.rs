@@ -757,6 +757,29 @@ fn missing_future_or_foreign_producers_are_rejected() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn only_a_copier_product_can_request_the_next_patch() {
+    use delivery::{version_policy, VersionPolicy};
+    proof {
+        reveal_strlit("explicit"); reveal_strlit("next_patch"); reveal_strlit("copier"); reveal_strlit("binary");
+        assert("explicit"@.len() != "next_patch"@.len());
+        assert("copier"@[0] != "binary"@[0]);
+    }
+    expect_recipe(matches!(version_policy(Some("binary"), false, None), VersionPolicy::Explicit));
+    expect_recipe(matches!(version_policy(Some("binary"), true, Some("explicit")), VersionPolicy::Explicit));
+    expect_recipe(matches!(version_policy(Some("copier"), true, Some("next_patch")), VersionPolicy::NextPatch));
+    expect_recipe(matches!(version_policy(Some("binary"), true, Some("next_patch")), VersionPolicy::WrongProduct));
+    expect_recipe(matches!(version_policy(None, true, Some("next_patch")), VersionPolicy::WrongProduct));
+    expect_recipe(matches!(version_policy(Some("copier"), true, None), VersionPolicy::Unknown));
+}
+
+fn unknown_version_policies_stop_before_release_lookup(name: &str, product: &str)
+    requires name@ != "explicit"@, name@ != "next_patch"@,
+{
+    let result = delivery::version_policy(Some(product), true, Some(name));
+    expect_recipe(matches!(result, delivery::VersionPolicy::Unknown));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn release_events_stop_before_unknown_sources_and_writes() {
     use delivery::{release_event, ReleaseEvent, draft_notes, DraftNotes};
     proof {
