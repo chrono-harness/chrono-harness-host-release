@@ -11,6 +11,78 @@ use vstd::prelude::*;
 use vstd::string::StringSliceAdditionalSpecFns;
 
 verus! {
+/// GitHub's existing pushed tag grammar accepts leading zeros and an ASCII
+/// prerelease suffix made of letters, digits, dots or hyphens.
+pub enum TagBranch { Main, Dev, Invalid }
+
+pub open spec fn digit(b: u8) -> bool { 48 <= b <= 57 }
+pub open spec fn preview_char(b: u8) -> bool {
+    digit(b) || 65 <= b <= 90 || 97 <= b <= 122 || b == 46 || b == 45
+}
+
+fn tag_component(value: &[u8], start: usize, preview: bool) -> (valid: bool)
+    ensures valid == (start < value.len() && forall|i: int| start <= i < value.len()
+        ==> if preview { preview_char(#[trigger] value@[i]) } else { digit(#[trigger] value@[i]) }),
+{
+    if start >= value.len() { return false; }
+    let mut i = start;
+    while i < value.len()
+        invariant start < value.len(), start <= i <= value.len(),
+            forall|j: int| start <= j < i ==>
+                if preview { preview_char(#[trigger] value@[j]) } else { digit(#[trigger] value@[j]) },
+        decreases value.len() - i,
+    {
+        let b = value[i];
+        if !((48 <= b && b <= 57) || (preview
+            && ((65 <= b && b <= 90) || (97 <= b && b <= 122) || b == 46 || b == 45))) {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+pub open spec fn numeric_component(value: Seq<u8>, start: int) -> bool {
+    start < value.len() && forall|i: int| start <= i < value.len() ==> digit(#[trigger] value[i])
+}
+
+pub open spec fn tag_core(parts: Seq<&[u8]>) -> bool {
+    parts.len() == 3 && parts[0]@.len() > 0 && parts[0]@[0] == 118
+        && numeric_component(parts[0]@,1) && numeric_component(parts[1]@,0) && numeric_component(parts[2]@,0)
+}
+
+pub open spec fn preview_suffix(suffix: Option<&[u8]>) -> bool {
+    match suffix {
+        Some(s) => s.len() > 0 && forall|i: int| 0 <= i < s.len() ==> preview_char(#[trigger] s@[i]),
+        None => false,
+    }
+}
+
+pub fn tag_branch(parts: &[&[u8]], suffix: Option<&[u8]>) -> (branch: TagBranch)
+    ensures (branch is Main) == (tag_core(parts@) && suffix.is_none()),
+            (branch is Dev) == (tag_core(parts@) && preview_suffix(suffix)),
+            (branch is Invalid) == (!tag_core(parts@) || (suffix.is_some() && !preview_suffix(suffix))),
+{
+    if parts.len() != 3 || parts[0].len() == 0 || parts[0][0] != 118
+        || !tag_component(parts[0],1,false) || !tag_component(parts[1],0,false)
+        || !tag_component(parts[2],0,false) { return TagBranch::Invalid; }
+    match suffix {
+        None => TagBranch::Main,
+        Some(s) if tag_component(s,0,true) => TagBranch::Dev,
+        Some(_) => TagBranch::Invalid,
+    }
+}
+
+pub fn pushed_main(source: &str, main: &str) -> (admit: bool)
+    ensures admit == (policy::release_oid(source.spec_bytes()) && source@ == main@),
+{
+    policy::valid_release_oid(source.as_bytes()) && policy::text_fields(&[(Some(source),main)])
+}
+
+pub fn pushed_dev(ancestor_status: i32) -> (admit: bool)
+    ensures admit == (ancestor_status == 0),
+{ ancestor_status == 0 }
+
 pub open spec fn segment(all: Seq<u8>, at: int, part: Seq<u8>) -> bool {
     0 <= at && at + part.len() <= all.len()
         && forall|i: int| 0 <= i < part.len() ==> all[at+i] == part[i]
@@ -310,4 +382,58 @@ pub fn resolve(
     }
     identity.verified_ci = Some(ci);
     Ok(identity)
+}
+
+/// Git argument vectors are fixed. The host only dispatches the GitHub release
+/// build after this command returns success.
+#[cfg(not(verus_keep_ghost))]
+pub fn check_pushed_tag(
+    tag: &str,
+    mut git: impl FnMut(&[&str]) -> Result<(i32, String), String>,
+) -> Result<(), String> {
+    let (core, suffix) = match tag.split_once('-') {
+        Some((core, suffix)) => (core, Some(suffix.as_bytes())),
+        None => (tag, None),
+    };
+    let parts: Vec<_> = core.splitn(4, '.').map(str::as_bytes).collect();
+    let branch = tag_branch(&parts, suffix);
+    if matches!(branch, TagBranch::Invalid) {
+        return Err(format!("Unsupported release tag: {tag}"));
+    }
+    let mut revision = |reference: &str| {
+        let (exit, raw) = git(&["rev-parse", reference])?;
+        if exit != 0 {
+            return Err(format!("git rev-parse {reference} exited {exit}"));
+        }
+        let oid = raw.trim_end_matches('\n').to_owned();
+        if !policy::valid_release_oid(oid.as_bytes()) {
+            return Err(format!("invalid Git OID for {reference}"));
+        }
+        Ok(oid)
+    };
+    let source = revision("HEAD")?;
+    match branch {
+        TagBranch::Main => {
+            let main = revision("refs/remotes/origin/main")?;
+            if pushed_main(&source, &main) {
+                Ok(())
+            } else {
+                Err("stable release source differs from main".into())
+            }
+        }
+        TagBranch::Dev => {
+            let (exit, _) = git(&[
+                "merge-base",
+                "--is-ancestor",
+                &source,
+                "refs/remotes/origin/dev",
+            ])?;
+            if pushed_dev(exit) {
+                Ok(())
+            } else {
+                Err(format!("git merge-base --is-ancestor exited {exit}"))
+            }
+        }
+        TagBranch::Invalid => unreachable!(),
+    }
 }
