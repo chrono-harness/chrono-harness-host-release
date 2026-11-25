@@ -447,6 +447,10 @@ pub fn resolve_mise_tool(
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum Promotion {
+    #[serde(rename = "version-policy")]
+    VersionPolicy {
+        config: Value,
+    },
     Tag {
         tag: String,
         refs: Vec<Value>,
@@ -482,6 +486,21 @@ enum Promotion {
 pub fn promotion(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery as policy;
     match read(input)? {
+        Promotion::VersionPolicy { config } => {
+            let field = config.get("version_policy");
+            match policy::version_policy(
+                config["kind"].as_str(),
+                field.is_some(),
+                field.and_then(Value::as_str),
+            ) {
+                policy::VersionPolicy::Explicit => Ok(Value::Bool(false)),
+                policy::VersionPolicy::NextPatch => Ok(Value::Bool(true)),
+                policy::VersionPolicy::Unknown => Err("unsupported version policy".into()),
+                policy::VersionPolicy::WrongProduct => {
+                    Err("next_patch requires a Copier source product".into())
+                }
+            }
+        }
         Promotion::Tag { tag, refs } => {
             let names: Vec<_> = refs.iter().map(|row| row["ref"].as_str()).collect();
             Ok(Value::Bool(
