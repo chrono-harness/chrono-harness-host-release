@@ -11,8 +11,9 @@ if [[ $# -ne 1 || $1 != --native ]]; then
   echo 'usage: ./check.sh [--native]' >&2
   exit 2
 fi
-mkdir -p target
-scratch=$(mktemp -d "$(pwd -P)/target/check.XXXXXXXX")
+scratch_root=$(pwd -P)/.chrono-harness/state/native-check
+mkdir -p "$scratch_root"
+scratch=$(mktemp -d "$scratch_root/check.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 export TMPDIR="$scratch"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$scratch/cargo}"
@@ -53,13 +54,13 @@ src=crates/host-release/src
 tests=crates/host-release-tests/tests
 included="$tests/../../host-release/src"
 
-chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/verify.release-recipe.rlib "$src/verified_recipe.rs" "$src/main.rs" \
+chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe.rlib "$src/verified_recipe.rs" "$src/main.rs" \
   "$src/execution.rs" "$src/frontend.rs" \
   "$src/receipt.rs" "$src/recipe.rs" \
   "$src/preview.rs" "$src/staging.rs" \
   "$src/delivery.rs" "$src/publication.rs" \
   "$src/version_order.rs" "$src/roadmap.rs" "$src/verified_delivery.rs" "$src/identity.rs"
-chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/verify.release-recipe-tests.rlib "$tests/verified_recipe.rs" "$included/verified_recipe.rs" \
+chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe-tests.rlib "$tests/verified_recipe.rs" "$included/verified_recipe.rs" \
   "$included/main.rs" "$included/execution.rs" \
   "$included/frontend.rs" "$included/receipt.rs" \
   "$included/recipe.rs" "$included/preview.rs" \

@@ -15,6 +15,14 @@
       "root": "crates/host-release",
       "test_project": "host-release-tests",
       "actions": {
+        "prepare_proof_directory": {
+          "operation": "prepare.release-proof-directory",
+          "tool": "bash",
+          "argv": [
+            "-c",
+            "mkdir -p -- .chrono-harness/state/release-proofs/"
+          ]
+        },
         "verify_recipe": {
           "operation": "verify.release-recipe",
           "tool": "verus",
@@ -26,10 +34,10 @@
             "2",
             "--output-json",
             "--compile",
-            "--emit=link=.chrono-harness/state/verify.release-recipe.rlib,dep-info=.chrono-harness/state/verify.release-recipe.rlib.d",
+            "--emit=link=.chrono-harness/state/release-proofs/verify.release-recipe.rlib,dep-info=.chrono-harness/state/release-proofs/verify.release-recipe.rlib.d",
             "crates/host-release/src/verified_recipe.rs",
             "-o",
-            ".chrono-harness/state/verify.release-recipe.rlib",
+            ".chrono-harness/state/release-proofs/verify.release-recipe.rlib",
             "-Zchecksum-hash-algorithm=sha256"
           ],
           "output_contract": {
@@ -59,10 +67,10 @@
             "2",
             "--output-json",
             "--compile",
-            "--emit=link=.chrono-harness/state/verify.release-recipe-tests.rlib,dep-info=.chrono-harness/state/verify.release-recipe-tests.rlib.d",
+            "--emit=link=.chrono-harness/state/release-proofs/verify.release-recipe-tests.rlib,dep-info=.chrono-harness/state/release-proofs/verify.release-recipe-tests.rlib.d",
             "crates/host-release-tests/tests/verified_recipe.rs",
             "-o",
-            ".chrono-harness/state/verify.release-recipe-tests.rlib",
+            ".chrono-harness/state/release-proofs/verify.release-recipe-tests.rlib",
             "-Zchecksum-hash-algorithm=sha256"
           ],
           "output_contract": {
