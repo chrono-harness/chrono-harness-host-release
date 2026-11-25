@@ -8,6 +8,12 @@ use verus_builtin_macros::verus;
 use vstd::prelude::*;
 
 verus! {
+pub fn template_run_command(args: &[String]) -> (selected: bool)
+    ensures selected == (args.len() == 1 && args@[0]@ == "template-run-v1"@),
+{
+    args.len() == 1 && same_text(args[0].as_str(), "template-run-v1")
+}
+
 pub fn select_preview_command(flag: &str) -> (selected: bool)
     ensures selected == (flag@ == "--select-preview"@),
 {
@@ -28,6 +34,10 @@ fn run() -> Result<i32, String> {
                 .map_err(|_| "non UTF-8 release argument".to_owned())
         })
         .collect::<Result<Vec<_>, _>>()?;
+    if template_run_command(&args) {
+        chrono_host_release::template_run::check(std::io::stdin().lock())?;
+        return Ok(0);
+    }
     match args.as_slice() {
         [command, tag] if command == "check-pushed-tag" => {
             chrono_host_release::identity::check_pushed_tag(tag, |args| {
@@ -82,10 +92,6 @@ fn run() -> Result<i32, String> {
         },
         [command] if command == "template-release-v1" => {
             chrono_host_release::template_run::release(std::io::stdin().lock())?;
-            Ok(0)
-        },
-        [command] if command == "template-run-v1" => {
-            chrono_host_release::template_run::check(std::io::stdin().lock())?;
             Ok(0)
         },
         [command] if command == "roadmap-v1" => chrono_host_release::verified_recipe::roadmap::run(std::io::stdin().lock(), std::io::stdout().lock()),

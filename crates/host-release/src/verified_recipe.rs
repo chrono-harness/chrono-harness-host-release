@@ -5,6 +5,9 @@ use verus_builtin_macros::verus;
 use vstd::prelude::*;
 
 #[cfg(verus_keep_ghost)]
+#[path = "codec.rs"]
+pub mod codec;
+#[cfg(verus_keep_ghost)]
 #[path = "main.rs"]
 pub mod command;
 #[cfg(verus_keep_ghost)]
