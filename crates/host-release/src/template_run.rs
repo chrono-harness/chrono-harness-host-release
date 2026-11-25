@@ -221,6 +221,15 @@ pub fn latest_stable(input: impl Read) -> Result<Option<String>, String> {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum Promotion {
+    Tag {
+        tag: String,
+        refs: Vec<Value>,
+    },
+    Event {
+        repository: String,
+        event_name: String,
+        event: Value,
+    },
     Contains {
         comparison: Value,
     },
@@ -247,6 +256,37 @@ enum Promotion {
 pub fn promotion(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery as policy;
     match read(input)? {
+        Promotion::Tag { tag, refs } => {
+            let names: Vec<_> = refs.iter().map(|row| row["ref"].as_str()).collect();
+            Ok(Value::Bool(
+                policy::last_job_named(&names, &format!("refs/tags/{tag}")).is_some(),
+            ))
+        }
+        Promotion::Event {
+            repository,
+            event_name,
+            event,
+        } => {
+            use policy::ReleaseEvent;
+            let route = policy::release_event(
+                &repository,
+                event["repository"]["full_name"].as_str(),
+                &event_name,
+                event["workflow_run"]["head_branch"].as_str(),
+                event["ref"].as_str(),
+            );
+            Ok(Value::String(
+                match route {
+                    ReleaseEvent::Dev => "dev",
+                    ReleaseEvent::Main => "main",
+                    ReleaseEvent::Dispatch => "dispatch",
+                    ReleaseEvent::WrongRepository => return Err("wrong event repository".into()),
+                    ReleaseEvent::WrongBranch => return Err("unsupported release branch".into()),
+                    ReleaseEvent::WrongEvent => return Err("dispatch from dev".into()),
+                }
+                .into(),
+            ))
+        }
         Promotion::Contains { comparison } => {
             if !policy::includes_base(comparison["status"].as_str()) {
                 return Err("branch does not contain the selected commit".into());
@@ -567,6 +607,16 @@ pub fn binary_origins(input: impl Read) -> Result<Value, String> {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum Publication {
+    Draft {
+        verify: bool,
+        origins: bool,
+        expected: String,
+        release: Value,
+    },
+    Main {
+        source: String,
+        reference: Value,
+    },
     Ref {
         name: String,
         source: String,
@@ -605,6 +655,32 @@ pub fn publication(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery as policy;
     use serde_json::json;
     match read(input)? {
+        Publication::Draft {
+            verify,
+            origins,
+            expected,
+            release,
+        } => {
+            use policy::DraftNotes;
+            match policy::draft_notes(verify, origins, release["body"].as_str(), &expected) {
+                DraftNotes::Keep => Ok(Value::Bool(false)),
+                DraftNotes::Replace => Ok(Value::Bool(true)),
+                DraftNotes::Refuse => Err("different build origins on draft".into()),
+            }
+        }
+        Publication::Main { source, reference } => {
+            use policy::MainRef;
+            match policy::main_ref(
+                reference["ref"].as_str(),
+                reference["object"]["type"].as_str(),
+                reference["object"]["sha"].as_str(),
+                &source,
+            ) {
+                MainRef::Current => Ok(Value::Bool(false)),
+                MainRef::FastForward => Ok(Value::Bool(true)),
+                MainRef::Invalid => Err("invalid main reference before publication".into()),
+            }
+        }
         Publication::Ref {
             name,
             source,

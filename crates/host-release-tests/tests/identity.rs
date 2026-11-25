@@ -605,3 +605,39 @@ fn workflow_rejects_the_first_invalid_input_before_reading_a_git_blob() {
     );
     assert!(commands.calls.is_empty());
 }
+
+#[test]
+fn template_event_draft_and_main_observations_drive_writes() {
+    use chrono_host_release::template_run::{promotion, publication};
+    use serde_json::{Value, json};
+    let route = |event_name, event: Value| {
+        let query = json!({"kind":"event","repository":"owner/project","event_name":event_name,"event":event});
+        promotion(serde_json::to_vec(&query).unwrap().as_slice())
+    };
+    let event =
+        json!({"repository":{"full_name":"owner/project"},"workflow_run":{"head_branch":"dev"}});
+    assert_eq!(route("workflow_run", event.clone()).unwrap(), "dev");
+    assert!(route("workflow_dispatch", event).is_err());
+    let tag = |refs| {
+        promotion(
+            serde_json::to_vec(&json!({"kind":"tag","tag":"v1.2.0","refs":refs}))
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap()
+    };
+    assert_eq!(tag(json!([{"ref":"refs/tags/v1.2.0-alpha.1"}])), false);
+    assert_eq!(tag(json!([{"ref":"refs/tags/v1.2.0"}])), true);
+    let published = |q: Value| publication(serde_json::to_vec(&q).unwrap().as_slice());
+    let mut q = json!({"kind":"draft","verify":false,"origins":true,"expected":"wanted","release":{"body":"other"}});
+    assert_eq!(published(q.clone()).unwrap(), true);
+    q["verify"] = json!(true);
+    assert!(published(q).is_err());
+    let source = "a".repeat(40);
+    let mut q = json!({"kind":"main","source":source,"reference":{"ref":"refs/heads/main","object":{"type":"commit","sha":source}}});
+    assert_eq!(published(q.clone()).unwrap(), false);
+    q["reference"]["object"]["sha"] = json!("b".repeat(40));
+    assert_eq!(published(q.clone()).unwrap(), true);
+    q["reference"]["ref"] = json!("refs/heads/other");
+    assert!(published(q).is_err());
+}

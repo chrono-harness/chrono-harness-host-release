@@ -433,6 +433,63 @@ pub fn selected_ref(present: bool, reference: Option<&str>, expected_ref: &str,
     if text_fields(&[(reference, expected_ref), (kind, "commit"), (oid, source)]) { 1 } else { 2 }
 }
 
+/// Decide which source can drive a release before reading its configuration.
+pub enum ReleaseEvent { Dev, Main, Dispatch, WrongRepository, WrongBranch, WrongEvent }
+
+pub fn release_event(repository: &str, actual: Option<&str>, event: &str,
+    branch: Option<&str>, git_ref: Option<&str>) -> (out: ReleaseEvent)
+    ensures
+        (out is WrongRepository) == !text_pair((actual,repository)),
+        (out is Dev) == (text_pair((actual,repository)) && event@ == "workflow_run"@ && text_pair((branch,"dev"))),
+        (out is Main) == (text_pair((actual,repository)) && event@ == "workflow_run"@ && text_pair((branch,"main"))),
+        (out is Dispatch) == (text_pair((actual,repository)) && event@ == "workflow_dispatch"@ && text_pair((git_ref,"refs/heads/dev"))),
+        (out is WrongBranch) == (text_pair((actual,repository)) && event@ == "workflow_run"@ && !text_pair((branch,"dev")) && !text_pair((branch,"main"))),
+        (out is WrongEvent) == (text_pair((actual,repository)) && event@ != "workflow_run"@ && !(event@ == "workflow_dispatch"@ && text_pair((git_ref,"refs/heads/dev")))),
+{
+    proof {
+        reveal_strlit("workflow_run"); reveal_strlit("workflow_dispatch"); reveal_strlit("dev"); reveal_strlit("main");
+        assert("workflow_run"@.len() != "workflow_dispatch"@.len());
+        assert("dev"@.len() != "main"@.len());
+    }
+    if !text_fields(&[(actual, repository)]) { return ReleaseEvent::WrongRepository; }
+    if same_text(event,"workflow_run") {
+        if text_fields(&[(branch,"dev")]) { return ReleaseEvent::Dev; }
+        if text_fields(&[(branch,"main")]) { return ReleaseEvent::Main; }
+        return ReleaseEvent::WrongBranch;
+    }
+    if same_text(event,"workflow_dispatch") && text_fields(&[(git_ref,"refs/heads/dev")]) {
+        ReleaseEvent::Dispatch
+    } else { ReleaseEvent::WrongEvent }
+}
+
+pub enum DraftNotes { Keep, Replace, Refuse }
+pub fn draft_notes(verify: bool, origins: bool, body: Option<&str>, expected: &str) -> (out: DraftNotes)
+    ensures (out is Keep) == (!origins || text_pair((body,expected))),
+        (out is Replace) == (origins && !text_pair((body,expected)) && !verify),
+        (out is Refuse) == (origins && !text_pair((body,expected)) && verify),
+{
+    if !origins || text_fields(&[(body,expected)]) { DraftNotes::Keep }
+    else if verify { DraftNotes::Refuse } else { DraftNotes::Replace }
+}
+
+pub enum MainRef { Current, FastForward, Invalid }
+pub fn main_ref(reference: Option<&str>, kind: Option<&str>, oid: Option<&str>, target: &str) -> (out: MainRef)
+    ensures match out {
+        MainRef::Invalid => !text_pair((reference,"refs/heads/main")) || !text_pair((kind,"commit"))
+            || !release_oid(target.spec_bytes())
+            || !(oid matches Some(value) && release_oid(value.spec_bytes())),
+        MainRef::Current => text_pair((reference,"refs/heads/main")) && text_pair((kind,"commit"))
+            && release_oid(target.spec_bytes()) && text_pair((oid,target)),
+        MainRef::FastForward => text_pair((reference,"refs/heads/main")) && text_pair((kind,"commit"))
+            && release_oid(target.spec_bytes()) && (oid matches Some(value) && release_oid(value.spec_bytes()) && value@ != target@),
+    },
+{
+    let Some(oid) = oid else { return MainRef::Invalid; };
+    if !valid_release_oid(target.as_bytes()) || !valid_release_oid(oid.as_bytes())
+        || !text_fields(&[(reference,"refs/heads/main"),(kind,"commit")]) { return MainRef::Invalid; }
+    if same_text(oid,target) { MainRef::Current } else { MainRef::FastForward }
+}
+
 /// Missing tags can be created for a new release or a draft explicitly targeting this source.
 pub fn publication_state(has_release: bool, reference: u8, draft: Option<bool>, target: Option<&str>,
     source: &str, missing: usize) -> (action: u8)
