@@ -898,7 +898,18 @@ fn github_release_pagination_uses_the_final_complete_response() {
     assert!(release_page_state(&format!("HTTP/2 200\r\n{next}\r\n\r\n")).unwrap());
     assert!(!release_page_state(&format!("HTTP/1.1 100 Continue\r\n{next}\r\n\r\nHTTP/2 200\r\nLink: <https://api.github.com/items?page=3>; rel=\"prev\"\r\n\r\n")).unwrap());
     assert!(!release_page_state("HTTP/2 200\nContent-Type: application/json\n\n").unwrap());
-    for bad in ["", "HTTP/2 429\n", "HTTP/2 200\nLink: <url without terminator\n", "HTTP/2 200\nLink: <target>; rel=\"next\n"] {
-        assert!(release_page_state(bad).is_err());
+    for bad in [
+        "",
+        "HTTP/2 429\n\n",
+        "HTTP/bad 200\n\n",
+        "HTTP/2 200\r\n",
+        "HTTP/2 200\nLink: <target>; rel=\"next\"\n",
+        "HTTP/2 200\nLink broken\n\n",
+        "HTTP/2 200\nLink:\n\n",
+        "HTTP/2 200\nLink: <url without terminator\n\n",
+        "HTTP/2 200\nLink: <target>; rel=\"next\n\n",
+        "HTTP/2 200\nLink: <target>; rel=\"prev\",\n\n",
+    ] {
+        assert!(release_page_state(bad).is_err(), "{bad:?}");
     }
 }

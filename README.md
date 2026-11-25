@@ -36,7 +36,7 @@
 
 每次安装调用 `resolve-install-v1`，stdin JSON 提供 `repository`、`selector`（`stable`、`preview` 或精确标签）、`assets`（`linux-x64` 和 `macos-arm64` 的实际资产名）及 `releases`（该仓 GitHub REST 全部页的原始 Release 对象数组）。成功返回 `tag`、`version` 和两个平台的 `url`、`checksum`。通道只接受已公开、非草稿且 GitHub 预发行标记与 SemVer 一致的版本。`preview` 选择 GitHub UTC 发布时间最新的预发行，同秒并列按 SemVer 排序。`stable` 选择最高正式版本，同版本优先级按发布时间排序。两者最终并列时按标签文本排序。选中版本缺所需资产、上传状态、正确 URL 或 SHA-256 时退出 2。
 
-Shell 安装器可直接运行 `chrono-host-release resolve-install-v1 --mise-tool COMMAND OWNER/REPO SELECTOR LINUX_ASSET MACOS_ASSET PAGE_FILE...`。每个文件是一页原始 JSON 数组；完整读取后，stdout 给出该命令的 mise TOML 安装项。调用方负责从 GitHub 获取全部页，并使用同次返回的 URL 和摘要下载和校验各自的平台文件。
+Shell 安装器可直接运行 `chrono-host-release resolve-install-v1 --mise-tool COMMAND OWNER/REPO SELECTOR LINUX_ASSET MACOS_ASSET PAGE_FILE...`。每个文件是一页原始 JSON 数组；完整读取后，stdout 给出该命令的 mise TOML 安装项。调用方将 curl 的原始响应头文件交给同一程序的 `resolve-install-v1 --page-state HEADERS`。最终 HTTP 200 响应中，GitHub Link 字段有 `rel="next"` 时输出 `next`，末页输出 `done`。响应头缺失、不完整或 Link 格式错误时退出 2。调用方负责从 GitHub 获取全部页，并使用同次返回的 URL 和摘要下载和校验各自的平台文件。
 
 `template-consumer-pin-v1` 从下游已落地清单判定安装版本，成功返回 JSON 数组 `[tag, checksums]`。Copier 请求提供 `kind="copier"`、`repository`、`version`、`rolling` 和解析后的 `answers`，源模板产物的 checksums 为 null。二进制请求提供 `kind="binary"`、`repository`、`version`、`binary` 和 mise 的 `tool` 对象。返回对应 Linux x86_64 与 macOS arm64 安装资产的完整名称和 SHA-256。调用方从该宿主选定提交读取 YAML 或 TOML，随后以返回的标签和摘要核对公开发行。
 

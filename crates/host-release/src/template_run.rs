@@ -422,67 +422,60 @@ pub fn resolve_install(input: impl Read) -> Result<Value, String> {
 pub fn release_page_state(headers: &str) -> Result<bool, String> {
     let start = headers.rfind("\nHTTP/").map_or(0, |i| i + 1);
     let mut lines = headers[start..].lines();
-    let status = lines
-        .next()
-        .and_then(|line| line.strip_prefix("HTTP/"))
-        .ok_or("missing GitHub response status")?;
-    let code = status
-        .split_ascii_whitespace()
-        .nth(1)
-        .and_then(|code| code.parse::<u16>().ok());
-    if !matches!(code, Some(200..=299)) {
-        return Err("expected a successful GitHub response status".into());
+    let mut status = lines.next().unwrap_or_default().split_ascii_whitespace();
+    if !matches!(
+        status.next(),
+        Some("HTTP/1.0" | "HTTP/1.1" | "HTTP/2" | "HTTP/3")
+    ) || status.next() != Some("200")
+    {
+        return Err("expected HTTP 200 for the GitHub release page".into());
     }
     let mut relations = Vec::new();
-    for line in lines.take_while(|line| !line.is_empty()) {
-        let Some((field, value)) = line.split_once(':') else {
-            continue;
-        };
+    loop {
+        let line = lines.next().ok_or("incomplete GitHub response headers")?;
+        if line.is_empty() {
+            break;
+        }
+        let (field, value) = line
+            .split_once(':')
+            .ok_or("invalid GitHub response field")?;
         if !field.eq_ignore_ascii_case("Link") {
             continue;
         }
-        // GitHub release URLs contain no literal '>'. Skip the complete URI
-        // before separating parameters so its query cannot be taken as rel.
-        let mut remaining = value.trim();
-        while !remaining.is_empty() {
-            let target = remaining
+        // GitHub emits <target>; rel="name" entries. Consume each complete
+        // target first: a comma or semicolon may occur inside a URI.
+        let mut entry = value.trim();
+        loop {
+            let (target, tail) = entry
                 .strip_prefix('<')
+                .and_then(|rest| rest.split_once('>'))
                 .ok_or("invalid GitHub Link target")?;
-            let (_, tail) = target
-                .split_once('>')
-                .ok_or("unterminated GitHub Link target")?;
-            let (parameters, rest) = tail.split_once(',').unwrap_or((tail, ""));
-            let mut found = false;
-            for param in parameters
-                .split(';')
+            if target.is_empty() {
+                return Err("empty GitHub Link target".into());
+            }
+            let (param, rest) = match tail.split_once(',') {
+                Some((param, rest)) => (param, Some(rest.trim_start())),
+                None => (tail, None),
+            };
+            let relation = param
+                .trim()
+                .strip_prefix(';')
                 .map(str::trim)
-                .filter(|p| !p.is_empty())
-            {
-                let (name, value) = param
-                    .split_once('=')
-                    .ok_or("invalid GitHub Link parameter")?;
-                if name.trim().eq_ignore_ascii_case("rel") {
-                    let value = value.trim();
-                    let value = if value.starts_with('"') {
-                        value
-                            .strip_prefix('"')
-                            .and_then(|s| s.strip_suffix('"'))
-                            .ok_or("invalid quoted GitHub Link relation")?
-                    } else {
-                        value
-                    };
-                    if value.is_empty() {
-                        return Err("empty GitHub Link relation".into());
-                    }
-                    relations.extend(value.split_ascii_whitespace());
-                    found = true;
-                }
+                .and_then(|param| param.strip_prefix("rel=\""))
+                .and_then(|value| value.strip_suffix('"'))
+                .filter(|name| {
+                    !name.is_empty() && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
+                })
+                .ok_or("invalid GitHub Link relation")?;
+            relations.push(relation);
+            match rest {
+                Some(next_entry) => entry = next_entry,
+                None => break,
             }
-            if !found {
-                return Err("missing GitHub Link relation".into());
-            }
-            remaining = rest.trim_start();
         }
+    }
+    if lines.next().is_some() {
+        return Err("unexpected data following GitHub response headers".into());
     }
     Ok(crate::verified_recipe::version_order::next_release_page(
         &relations,
