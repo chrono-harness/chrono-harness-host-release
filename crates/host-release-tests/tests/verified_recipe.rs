@@ -704,6 +704,48 @@ fn missing_future_or_foreign_producers_are_rejected() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn release_events_stop_before_unknown_sources_and_writes() {
+    use delivery::{release_event, ReleaseEvent, draft_notes, DraftNotes};
+    proof {
+        reveal_strlit("r"); reveal_strlit("s"); reveal_strlit("main"); reveal_strlit("dev");
+        reveal_strlit("topic"); reveal_strlit("workflow_run"); reveal_strlit("workflow_dispatch");
+        reveal_strlit("refs/heads/main"); reveal_strlit("refs/heads/dev"); reveal_strlit("commit");
+        reveal_strlit("refs/heads/topic"); reveal_strlit("notes"); reveal_strlit("other");
+        assert("workflow_run"@.len() != "workflow_dispatch"@.len());
+        assert("refs/heads/main"@.len() != "refs/heads/dev"@.len());
+        assert("topic"@.len() != "dev"@.len() && "topic"@.len() != "main"@.len());
+        assert("r"@[0] != "s"@[0] && "notes"@[0] != "other"@[0]);
+    }
+    expect_recipe(matches!(release_event("r",Some("r"),"workflow_run",Some("dev"),None), ReleaseEvent::Dev));
+    expect_recipe(matches!(release_event("r",Some("r"),"workflow_run",Some("main"),None), ReleaseEvent::Main));
+    expect_recipe(matches!(release_event("r",Some("r"),"workflow_dispatch",None,Some("refs/heads/dev")), ReleaseEvent::Dispatch));
+    expect_recipe(matches!(release_event("r",Some("r"),"workflow_dispatch",None,Some("refs/heads/main")), ReleaseEvent::WrongEvent));
+    expect_recipe(matches!(release_event("r",Some("r"),"workflow_run",Some("topic"),None), ReleaseEvent::WrongBranch));
+    expect_recipe(matches!(release_event("r",Some("s"),"workflow_run",Some("dev"),None), ReleaseEvent::WrongRepository));
+    expect_recipe(matches!(draft_notes(false,true,Some("other"),"notes"),DraftNotes::Replace));
+    expect_recipe(matches!(draft_notes(true,true,Some("other"),"notes"),DraftNotes::Refuse));
+    expect_recipe(matches!(draft_notes(true,true,Some("notes"),"notes"),DraftNotes::Keep));
+    expect_recipe(matches!(draft_notes(true,false,None,"notes"),DraftNotes::Keep));
+}
+
+fn direct_main_precondition(head: &str, older: &str)
+    requires delivery::release_oid(head.spec_bytes()), delivery::release_oid(older.spec_bytes()), head@ != older@,
+{
+    use delivery::{main_ref,MainRef};
+    proof { reveal_strlit("refs/heads/main"); reveal_strlit("refs/heads/topic");
+        assert("refs/heads/main"@.len() != "refs/heads/topic"@.len()); }
+    expect_recipe(matches!(main_ref(Some("refs/heads/main"),Some("commit"),Some(head),head),MainRef::Current));
+    expect_recipe(matches!(main_ref(Some("refs/heads/main"),Some("commit"),Some(older),head),MainRef::FastForward));
+    expect_recipe(matches!(main_ref(Some("refs/heads/topic"),Some("commit"),Some(older),head),MainRef::Invalid));
+}
+
+#[cfg(not(verus_keep_ghost))]
+#[test]
+fn main_updates_only_from_observed_direct_main_refs() {
+    direct_main_precondition("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn receipt_job_run_and_attempt_must_match_the_selected_producer() {
     proof {
         reveal_strlit("job"); reveal_strlit("other"); reveal_strlit("run"); reveal_strlit("changed");
