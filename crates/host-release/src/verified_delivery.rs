@@ -77,28 +77,6 @@ pub fn last_job_named(names: &[Option<&str>], expected: &str) -> (found: Option<
     None
 }
 
-pub enum NamedAsset { Missing, Duplicate, Found(usize) }
-
-/// The selected index must identify the only asset with the requested name.
-pub fn installation_asset(names: &[Option<&str>], requested: &str) -> (result: NamedAsset)
-    ensures match result {
-        NamedAsset::Missing => forall|i: int| 0 <= i < names.len() ==> !text_pair((#[trigger] names@[i], requested)),
-        NamedAsset::Duplicate => exists|i: int, j: int| 0 <= i < j < names.len()
-            && text_pair((names@[i], requested)) && text_pair((names@[j], requested)),
-        NamedAsset::Found(i) => i < names.len() && text_pair((names@[i as int], requested))
-            && forall|j: int| 0 <= j < names.len() && j != i ==> !text_pair((#[trigger] names@[j], requested)),
-    },
-{
-    let Some(i) = last_job_named(names, requested) else { return NamedAsset::Missing; };
-    let prefix = vstd::slice::slice_subrange(names, 0, i);
-    if let Some(earlier) = last_job_named(prefix, requested) {
-        assert(text_pair((names@[earlier as int], requested)));
-        NamedAsset::Duplicate
-    } else {
-        NamedAsset::Found(i)
-    }
-}
-
 pub open spec fn exercised_step(steps: Seq<(Option<&str>, Option<&str>)>, step: &str) -> bool {
     exists|i: int| 0 <= i < steps.len() && text_pair((steps[i].0, step)) && text_pair((steps[i].1, "success"))
 }
@@ -458,15 +436,6 @@ pub fn installed_download(url: Option<&str>, expected: &str, sha256: Option<&str
     }
 }
 
-pub fn uploaded_download(state: Option<&str>, url: Option<&str>, expected: &str, sha256: Option<&str>) -> (valid: bool)
-    ensures valid == (text_pair((state, "uploaded")) && text_pair((url, expected)) && match sha256 {
-        None => false,
-        Some(value) => value.spec_bytes().len() == 64 && lower_hex(value.spec_bytes()),
-    }),
-{
-    text_fields(&[(state, "uploaded")]) && installed_download(url, expected, sha256)
-}
-
 /// channel 的数字仅为适配器对既有枚举的无状态投影；3 表示拒绝。
 pub fn channel(text: &str) -> (out: u8)
     ensures out == if text@ == ""@ || text@ == "build"@ { 0u8 }
@@ -710,6 +679,52 @@ pub fn draft_state(draft: Option<bool>, missing: usize) -> (action: u8)
     },
 {
     match draft { Some(true) => 1, Some(false) if missing == 0 => 0, _ => 2 }
+}
+
+}
+
+verus! {
+pub enum NamedAsset { Missing, Duplicate, Found(usize) }
+
+/// The selected index must identify the only asset with the requested name.
+pub fn installation_asset(names: &[Option<&str>], requested: &str) -> (result: NamedAsset)
+    ensures match result {
+        NamedAsset::Missing => forall|i: int| 0 <= i < names.len() ==> !text_pair((#[trigger] names@[i], requested)),
+        NamedAsset::Duplicate => exists|i: int, j: int| 0 <= i < j < names.len()
+            && text_pair((names@[i], requested)) && text_pair((names@[j], requested)),
+        NamedAsset::Found(i) => i < names.len() && text_pair((names@[i as int], requested))
+            && forall|j: int| 0 <= j < names.len() && j != i ==> !text_pair((#[trigger] names@[j], requested)),
+    },
+{
+    let Some(i) = last_job_named(names, requested) else { return NamedAsset::Missing; };
+    let prefix = vstd::slice::slice_subrange(names, 0, i);
+    if let Some(earlier) = last_job_named(prefix, requested) {
+        assert(text_pair((names@[earlier as int], requested)));
+        assert(exists|a: int, b: int| 0 <= a < b < names.len()
+            && text_pair((names@[a], requested)) && text_pair((names@[b], requested))) by {
+            let a = earlier as int;
+            let b = i as int;
+            assert(0 <= a < b < names.len() && text_pair((names@[a], requested)) && text_pair((names@[b], requested)));
+        }
+        NamedAsset::Duplicate
+    } else {
+        assert forall|j: int| 0 <= j < names.len() && j != i implies !text_pair((#[trigger] names@[j], requested)) by {
+            if j < i {
+                assert(prefix@[j] == names@[j]);
+                assert(!text_pair((prefix@[j], requested)));
+            }
+        }
+        NamedAsset::Found(i)
+    }
+}
+
+pub fn uploaded_download(state: Option<&str>, url: Option<&str>, expected: &str, sha256: Option<&str>) -> (valid: bool)
+    ensures valid == (text_pair((state, "uploaded")) && text_pair((url, expected)) && match sha256 {
+        None => false,
+        Some(value) => value.spec_bytes().len() == 64 && lower_hex(value.spec_bytes()),
+    }),
+{
+    text_fields(&[(state, "uploaded")]) && installed_download(url, expected, sha256)
 }
 
 }
