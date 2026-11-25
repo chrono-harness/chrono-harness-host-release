@@ -55,7 +55,7 @@ tests=crates/host-release-tests/tests
 included="$tests/../../host-release/src"
 
 chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe.rlib "$src/verified_recipe.rs" "$src/codec.rs" "$src/main.rs" \
-  "$src/execution.rs" "$src/evidence.rs" "$src/frontend.rs" \
+  "$src/evidence.rs" "$src/execution.rs" "$src/frontend.rs" \
   "$src/receipt.rs" "$src/recipe.rs" \
   "$src/preview.rs" "$src/staging.rs" \
   "$src/delivery.rs" "$src/publication.rs" \
