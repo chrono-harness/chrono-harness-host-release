@@ -243,17 +243,13 @@ fn every_run_identity_field_is_required(omitted: usize)
 }
 
 #[cfg(verus_keep_ghost)]
-fn run_command_requires_one_complete_argument() {
-    let command = String::from("template-run-v1");
-    let other = String::from("template-release-v1");
-    proof {
-        reveal_strlit("template-run-v1"); reveal_strlit("template-release-v1");
-        assert("template-run-v1"@.len() != "template-release-v1"@.len());
-    }
-    expect_recipe(command::template_run_command(&[command.clone()]));
+fn run_command_requires_one_complete_argument(command: String, other: String, first: String, second: String)
+    requires command@ == "template-run-v1"@, other@ != "template-run-v1"@,
+{
+    expect_recipe(command::template_run_command(&[command]));
     expect_recipe(!command::template_run_command(&[]));
-    expect_recipe(!command::template_run_command(&[other.clone()]));
-    expect_recipe(!command::template_run_command(&[command, other]));
+    expect_recipe(!command::template_run_command(&[other]));
+    expect_recipe(!command::template_run_command(&[first, second]));
 }
 
 #[cfg(verus_keep_ghost)]
