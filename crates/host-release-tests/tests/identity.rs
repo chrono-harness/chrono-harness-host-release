@@ -607,6 +607,54 @@ fn workflow_rejects_the_first_invalid_input_before_reading_a_git_blob() {
 }
 
 #[test]
+fn a_pushed_tag_checks_only_the_branch_required_by_its_exact_grammar() {
+    use chrono_host_release::identity::check_pushed_tag;
+    use std::collections::VecDeque;
+    fn run(tag: &str, replies: &[(&[&str], i32, &str)]) -> Result<(), String> {
+        let mut calls: VecDeque<_> = replies.iter().collect();
+        let result = check_pushed_tag(tag, |args| {
+            let (expected, status, stdout) = calls.pop_front().expect("unexpected Git invocation");
+            assert_eq!(args, *expected);
+            Ok((*status, (*stdout).into()))
+        });
+        assert!(calls.is_empty());
+        result
+    }
+    let head: &[&str] = &["rev-parse", "HEAD"];
+    let main: &[&str] = &["rev-parse", "refs/remotes/origin/main"];
+    let ancestry: &[&str] = &[
+        "merge-base",
+        "--is-ancestor",
+        SOURCE,
+        "refs/remotes/origin/dev",
+    ];
+    for tag in ["v1.2.3", "v00.2.003"] {
+        run(tag, &[(head, 0, SOURCE), (main, 0, SOURCE)]).unwrap();
+        assert!(run(tag, &[(head, 0, SOURCE), (main, 0, TREE)]).is_err());
+    }
+    for tag in ["v1.2.3-alpha.1", "v1.2.3--", "v1.2.3-."] {
+        run(tag, &[(head, 0, SOURCE), (ancestry, 0, "")]).unwrap();
+        for code in [1, 128] {
+            assert!(run(tag, &[(head, 0, SOURCE), (ancestry, code, "")]).is_err());
+        }
+    }
+    for tag in [
+        "",
+        "v1.2",
+        "v1.2.3-",
+        "v1.2.3.4",
+        "v1.2.3-a/b",
+        "v.2.3",
+        "1.2.3",
+        "v1.2.3+build",
+    ] {
+        assert!(run(tag, &[]).is_err(), "{tag}");
+    }
+    assert!(run("v1.2.3", &[(head, 128, "")]).is_err());
+    assert!(run("v1.2.3", &[(head, 0, "bad")]).is_err());
+}
+
+#[test]
 fn template_event_draft_and_main_observations_drive_writes() {
     use chrono_host_release::template_run::{promotion, publication};
     use serde_json::{Value, json};

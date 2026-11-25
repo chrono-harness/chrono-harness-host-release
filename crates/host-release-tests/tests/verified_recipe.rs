@@ -41,6 +41,18 @@ mod staging_fixture;
 mod tool_fixture;
 
 verus! {
+#[cfg(verus_keep_ghost)]
+fn pushed_tags_separate_stable_main_from_dev_and_refuse_empty_suffixes() {
+    use policy::workflow_identity::{tag_branch, pushed_dev};
+    let major=[118u8,48,49]; let minor=[50u8]; let patch=[51u8]; let suffix=[45u8,46,65];
+    proof { assert(major@ =~= seq![118u8,48,49]); assert(minor@ =~= seq![50u8]); assert(patch@ =~= seq![51u8]); assert(suffix@ =~= seq![45u8,46,65]); }
+    let parts: [&[u8];3]=[&major,&minor,&patch];
+    let good=tag_branch(&parts,None); let preview=tag_branch(&parts,Some(&suffix));
+    let bad=tag_branch(&parts,Some(&[]));
+    let ancestor=pushed_dev(0); let other=pushed_dev(1); let failed=pushed_dev(128);
+    assert(good is Main && preview is Dev && bad is Invalid && ancestor && !other && !failed);
+}
+
 
 #[cfg(verus_keep_ghost)]
 fn fixed_series_requires_preview_and_rolling_accepts_stable(core: &str, parts: &[&str], serial: &str)
