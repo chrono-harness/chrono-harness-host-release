@@ -731,3 +731,103 @@ fn publication_preserves_provider_order_and_sorted_missing_names() {
         assert_eq!(decide(rows).unwrap_err(), first_error);
     }
 }
+
+#[test]
+fn installation_channels_resolve_the_selected_release_before_its_assets() {
+    use chrono_host_release::template_run::resolve_install;
+    use serde_json::{Value, json};
+    let repository = "org/product";
+    let digest = format!("sha256:{}", "7".repeat(64));
+    let row = |tag: &str, preview: bool| {
+        let assets = ["my-linux", "my-mac", "other-command"].map(|name| json!({
+            "name":name,"state":"uploaded","digest":digest,
+            "browser_download_url":format!("https://github.com/{repository}/releases/download/{tag}/{name}")
+        }));
+        json!({"tag_name":tag,"draft":false,"published_at":"2026-01-01T00:00:00Z","prerelease":preview,"assets":assets})
+    };
+    let call = |selector: &str, rows: &[Value]| {
+        let request = json!({"repository":repository,"selector":selector,"assets":{"linux-x64":"my-linux","macos-arm64":"my-mac"},"releases":rows});
+        resolve_install(serde_json::to_vec(&request).unwrap().as_slice())
+    };
+    let mut draft = row("v20.0.0", false);
+    draft["draft"] = json!(true);
+    let mut unpublished = row("v30.0.0", false);
+    unpublished["published_at"] = Value::Null;
+    let releases = vec![
+        row("v2.0.0-beta.8", true),
+        row("v2.0.0-alpha.22", true),
+        row("v1.10.0", false),
+        row("v2.0.0-rc.10", true),
+        row("v2.0.0-rc.2", true),
+        row("v1.9.99", false),
+        row("v3.0.0-rc.01", true),
+        row("v4.0.0-rc.1", false),
+        row("v5.0.0", true),
+        draft,
+        unpublished,
+    ];
+    for (selector, tag) in [
+        ("preview", "v2.0.0-rc.10"),
+        ("stable", "v1.10.0"),
+        ("v1.9.99", "v1.9.99"),
+    ] {
+        let result = call(selector, &releases).unwrap();
+        assert_eq!(result["tag"], tag);
+        assert_eq!(result["version"], &tag[1..]);
+        assert_eq!(
+            result["platforms"]["linux-x64"]["url"],
+            format!("https://github.com/{repository}/releases/download/{tag}/my-linux")
+        );
+        assert_eq!(result["platforms"]["macos-arm64"]["checksum"], digest);
+    }
+    assert!(call("v20.0.0", &releases).is_err());
+    assert!(call("v0.0.1", &releases).is_err());
+    assert!(call("stable", &[row("v2.0.0-alpha.7", true)]).is_err());
+    let mut bad = row("v3.0.0", false);
+    bad["assets"].as_array_mut().unwrap().remove(0);
+    assert!(
+        call("stable", &[row("v1.0.0", false), bad])
+            .unwrap_err()
+            .contains("missing asset my-linux")
+    );
+    for (field, value) in [
+        ("digest", "sha256:bad"),
+        ("state", "new"),
+        (
+            "browser_download_url",
+            "https://github.com/org/other/download",
+        ),
+    ] {
+        let mut bad = row("v1.0.0", false);
+        bad["assets"][1][field] = json!(value);
+        assert!(call("v1.0.0", &[bad]).is_err());
+    }
+}
+
+#[test]
+fn mise_installation_reads_all_original_pages_and_emits_one_tool() {
+    use chrono_host_release::template_run::resolve_mise_tool;
+    use serde_json::json;
+    let tmp = tempfile::tempdir().unwrap();
+    let checksum = format!("sha256:{}", "f".repeat(64));
+    let tag = "v5.4.3-beta.2";
+    let prefix = format!("https://github.com/x/y/releases/download/{tag}");
+    let assets=["one","two"].map(|a|json!({"name":a,"browser_download_url":format!("{prefix}/{a}"),"state":"uploaded","digest":checksum}));
+    let raw = json!([{"tag_name":tag,"draft":false,"prerelease":true,"published_at":"2026-02-10","assets":assets}]);
+    let first = tmp.path().join("first");
+    let last = tmp.path().join("last");
+    std::fs::write(&first, b"[]").unwrap();
+    std::fs::write(&last, serde_json::to_vec(&raw).unwrap()).unwrap();
+    let pages = [
+        first.to_str().unwrap().to_owned(),
+        last.to_str().unwrap().to_owned(),
+    ];
+    let actual = resolve_mise_tool("tool", "x/y", "preview", "one", "two", &pages).unwrap();
+    assert_eq!(
+        actual,
+        format!(
+            "[tools.\"http:tool\"]\nversion = \"5.4.3-beta.2\"\nbin = \"tool\"\n[tools.\"http:tool\".platforms]\nlinux-x64 = {{ url = \"{prefix}/one\", checksum = \"{checksum}\" }}\nmacos-arm64 = {{ url = \"{prefix}/two\", checksum = \"{checksum}\" }}\n"
+        )
+    );
+    assert!(resolve_mise_tool("tool", "x/y", "stable", "one", "two", &pages).is_err());
+}

@@ -1,6 +1,6 @@
 //! Read the selected GitHub run and its expected identity from the publisher.
 use crate::verified_recipe::delivery::{acceptance_declared, acceptance_job, landed_push};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::Read;
 
@@ -216,6 +216,228 @@ pub fn latest_stable(input: impl Read) -> Result<Option<String>, String> {
         })
         .collect();
     Ok(version_order::latest_stable(&keys).map(|index| rows[index].tag_name.clone()))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InstallAssets {
+    #[serde(rename = "linux-x64")]
+    linux: String,
+    #[serde(rename = "macos-arm64")]
+    macos: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InstallRequest {
+    repository: String,
+    selector: String,
+    assets: InstallAssets,
+    releases: Vec<Value>,
+}
+
+/// Core numbers reuse the release planner's unbounded decimal ordering. The
+/// SemVer library validates and compares prerelease identifiers and metadata.
+struct InstallVersion<'a> {
+    core: [&'a [u8]; 3],
+    pre: semver::Prerelease,
+}
+
+impl<'a> InstallVersion<'a> {
+    fn from_tag(tag: &'a str) -> Option<Self> {
+        let version = tag.strip_prefix('v')?;
+        let version = if let Some((raw, build)) = version.split_once('+') {
+            if build.is_empty() {
+                return None;
+            }
+            semver::BuildMetadata::new(build).ok()?;
+            raw
+        } else {
+            version
+        };
+        let (core, pre) = match version.split_once('-') {
+            Some((_, "")) => return None,
+            Some((core, suffix)) => (core, semver::Prerelease::new(suffix).ok()?),
+            None => (version, semver::Prerelease::EMPTY),
+        };
+        Some(Self {
+            core: components(core).ok()?,
+            pre,
+        })
+    }
+
+    fn compare(&self, other: &Self) -> std::cmp::Ordering {
+        use crate::verified_recipe::version_order::above;
+        use std::cmp::Ordering;
+        if above(self.core, other.core) {
+            Ordering::Greater
+        } else if above(other.core, self.core) {
+            Ordering::Less
+        } else {
+            self.pre.cmp(&other.pre)
+        }
+    }
+}
+
+fn install_release<'a>(selector: &str, releases: &'a [Value]) -> Result<&'a Value, String> {
+    use crate::verified_recipe::{roadmap::published, version_order::install_channel};
+    let public =
+        releases.iter().filter(
+            |r| match (r["draft"].as_bool(), r["published_at"].as_str()) {
+                (Some(draft), Some(date)) => published(draft, date),
+                _ => false,
+            },
+        );
+    let preview = match selector {
+        "stable" => false,
+        "preview" => true,
+        tag => {
+            return public
+                .into_iter()
+                .find(|r| r["tag_name"].as_str() == Some(tag))
+                .ok_or_else(|| format!("no published release with exact tag {tag}"));
+        }
+    };
+    public
+        .filter_map(|row| {
+            let tag = row["tag_name"].as_str()?;
+            let version = InstallVersion::from_tag(tag)?;
+            if !install_channel(
+                preview,
+                row["prerelease"].as_bool()?,
+                !version.pre.is_empty(),
+            ) {
+                return None;
+            }
+            Some((version, row["published_at"].as_str()?, tag, row))
+        })
+        .max_by(|a, b| {
+            a.0.compare(&b.0)
+                .then_with(|| a.1.cmp(b.1))
+                .then_with(|| a.2.cmp(b.2))
+        })
+        .map(|(_, _, _, r)| r)
+        .ok_or_else(|| format!("no published {selector} release"))
+}
+
+#[derive(Serialize)]
+struct InstallAsset<'a> {
+    url: &'a str,
+    checksum: &'a str,
+}
+
+fn install_asset<'a>(
+    repository: &str,
+    tag: &str,
+    name: &str,
+    release: &'a Value,
+) -> Result<InstallAsset<'a>, String> {
+    use crate::verified_recipe::delivery::installed_download;
+    let assets = release["assets"]
+        .as_array()
+        .ok_or("missing release assets array")?;
+    let mut matches = assets.iter().filter(|a| a["name"].as_str() == Some(name));
+    let asset = matches
+        .next()
+        .ok_or_else(|| format!("{tag}: missing asset {name}"))?;
+    if matches.next().is_some() {
+        return Err(format!("{tag}: duplicate asset {name}"));
+    }
+    let expected = format!("https://github.com/{repository}/releases/download/{tag}/{name}");
+    let url = asset["browser_download_url"]
+        .as_str()
+        .ok_or_else(|| format!("{tag}: missing download URL for {name}"))?;
+    let checksum = asset["digest"]
+        .as_str()
+        .ok_or_else(|| format!("{tag}: missing SHA-256 for {name}"))?;
+    if asset["state"].as_str() != Some("uploaded")
+        || !installed_download(Some(url), &expected, checksum.strip_prefix("sha256:"))
+    {
+        return Err(format!("{tag}: invalid uploaded URL or SHA-256 for {name}"));
+    }
+    Ok(InstallAsset { url, checksum })
+}
+
+#[derive(Serialize)]
+struct InstallPlatforms<'a> {
+    #[serde(rename = "linux-x64")]
+    linux: InstallAsset<'a>,
+    #[serde(rename = "macos-arm64")]
+    macos: InstallAsset<'a>,
+}
+
+#[derive(Serialize)]
+struct SelectedInstall<'a> {
+    tag: &'a str,
+    version: &'a str,
+    platforms: InstallPlatforms<'a>,
+}
+
+fn resolve_request(request: &InstallRequest) -> Result<SelectedInstall<'_>, String> {
+    let row = install_release(&request.selector, &request.releases)?;
+    let tag = row["tag_name"].as_str().ok_or("missing release tag")?;
+    let linux = install_asset(&request.repository, tag, &request.assets.linux, row)?;
+    let macos = install_asset(&request.repository, tag, &request.assets.macos, row)?;
+    Ok(SelectedInstall {
+        tag,
+        version: tag.strip_prefix('v').unwrap_or(tag),
+        platforms: InstallPlatforms { linux, macos },
+    })
+}
+
+pub fn resolve_install(input: impl Read) -> Result<Value, String> {
+    let request: InstallRequest = read(input)?;
+    serde_json::to_value(resolve_request(&request)?).map_err(|e| e.to_string())
+}
+
+pub fn resolve_mise_tool(
+    command: &str,
+    repository: &str,
+    selector: &str,
+    linux: &str,
+    macos: &str,
+    pages: &[String],
+) -> Result<String, String> {
+    if pages.is_empty() {
+        return Err("expected at least one GitHub Release page".into());
+    }
+    if !crate::verified_recipe::delivery::name(command.as_bytes()) {
+        return Err("invalid mise command name".into());
+    }
+    let mut releases = Vec::new();
+    for page in pages {
+        let file = std::fs::File::open(page).map_err(|e| format!("{page}: {e}"))?;
+        releases.extend(read::<Vec<Value>>(file)?);
+    }
+    let request = InstallRequest {
+        repository: repository.into(),
+        selector: selector.into(),
+        assets: InstallAssets {
+            linux: linux.into(),
+            macos: macos.into(),
+        },
+        releases,
+    };
+    let install = resolve_request(&request)?;
+    // JSON basic string literals are also TOML basic strings for these GitHub fields.
+    let quote = |s: &str| Value::String(s.to_owned()).to_string();
+    let key = quote(&format!("http:{command}"));
+    let mut toml = format!(
+        "[tools.{key}]\nversion = {}\nbin = {}\n[tools.{key}.platforms]\n",
+        quote(install.version),
+        quote(command)
+    );
+    for (platform, asset) in [
+        ("linux-x64", install.platforms.linux),
+        ("macos-arm64", install.platforms.macos),
+    ] {
+        toml.push_str(&format!(
+            "{platform} = {{ url = {}, checksum = {} }}\n",
+            quote(asset.url),
+            quote(asset.checksum)
+        ));
+    }
+    Ok(toml)
 }
 
 #[derive(Deserialize)]

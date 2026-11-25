@@ -9,6 +9,13 @@ use vstd::string::StringSliceAdditionalSpecFns;
 
 verus! {
 
+/// The public channel must agree with both GitHub and the SemVer prerelease component.
+pub fn install_channel(preview: bool, github_prerelease: bool, version_prerelease: bool) -> (eligible: bool)
+    ensures eligible == (preview == github_prerelease && preview == version_prerelease),
+{
+    preview == github_prerelease && preview == version_prerelease
+}
+
 pub open spec fn earlier(a: Seq<u8>, b: Seq<u8>) -> bool {
     a.len() < b.len() || (a.len() == b.len()
         && exists|i: int| 0 <= i < a.len() && a[i] < b[i]

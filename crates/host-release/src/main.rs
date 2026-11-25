@@ -50,6 +50,16 @@ fn run() -> Result<i32, String> {
             chrono_host_release::template_run::acceptance(std::io::stdin().lock())?;
             Ok(0)
         },
+        [command, flag, binary, repo, selector, linux, macos, pages @ ..] if command == "resolve-install-v1" && flag == "--mise-tool" => {
+            let tool = chrono_host_release::template_run::resolve_mise_tool(binary,repo,selector,linux,macos,pages)?;
+            print!("{tool}");
+            Ok(0)
+        },
+        [command] if command == "resolve-install-v1" => {
+            let release = chrono_host_release::template_run::resolve_install(std::io::stdin().lock())?;
+            println!("{release}");
+            Ok(0)
+        },
         [command] if command == "template-latest-stable-v1" => {
             let tag = chrono_host_release::template_run::latest_stable(std::io::stdin().lock())?;
             println!("{}", serde_json::to_string(&tag).map_err(|e| e.to_string())?);

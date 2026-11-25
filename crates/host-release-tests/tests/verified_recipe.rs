@@ -143,6 +143,17 @@ fn publication_replay_requires_an_existing_ref_and_all_assets() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn install_channels_match_the_public_release_and_version_together() {
+    use policy::version_order::install_channel;
+    expect_recipe(install_channel(false, false, false));
+    expect_recipe(install_channel(true, true, true));
+    expect_recipe(!install_channel(false, true, true));
+    expect_recipe(!install_channel(true, false, true));
+    expect_recipe(!install_channel(true, true, false));
+    expect_recipe(!install_channel(false, false, true));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn consumer_pins_reject_bad_series_and_missing_downloads() {
     let empty: [&str; 0] = [];
     expect_recipe(!delivery::consumer_series(true, "", &empty, "", None));
