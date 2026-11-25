@@ -41,6 +41,7 @@ fn line_value<'a>(stream: &'a [u8], marker: &[u8]) -> (value: Option<&'a [u8]>)
     },
 {
     let Some(index) = roadmap::first_marker(stream, marker) else { return None; };
+    assert(roadmap::marker_at(stream@, marker@, index as int));
     let start = index + marker.len();
     let mut end = start;
     while end < stream.len() && stream[end] != 10
