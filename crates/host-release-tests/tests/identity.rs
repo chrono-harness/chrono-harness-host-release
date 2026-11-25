@@ -842,6 +842,13 @@ fn installation_channels_resolve_the_selected_release_before_its_assets() {
             .unwrap_err()
             .contains("missing asset my-linux")
     );
+    let mut duplicate = row("v1.0.0", false);
+    let assets = duplicate["assets"].as_array_mut().unwrap();
+    assets.push(assets[1].clone());
+    assert_eq!(
+        call("v1.0.0", &[duplicate]).unwrap_err(),
+        "v1.0.0: duplicate asset my-mac"
+    );
     for (field, value) in [
         ("digest", "sha256:bad"),
         ("state", "new"),

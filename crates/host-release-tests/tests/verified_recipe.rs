@@ -757,6 +757,21 @@ fn missing_future_or_foreign_producers_are_rejected() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn installation_asset_identity_and_uploaded_state() {
+    use delivery::{installation_asset, uploaded_download, NamedAsset};
+    proof {
+        reveal_strlit("linux"); reveal_strlit("mac"); reveal_strlit("uploaded"); reveal_strlit("new");
+        assert("mac"@.len() != "linux"@.len()); assert("new"@.len() != "uploaded"@.len());
+    }
+    let names = [None, Some("mac"), Some("linux"), Some("mac")];
+    expect_recipe(matches!(installation_asset(&names, "linux"), NamedAsset::Found(2)));
+    expect_recipe(matches!(installation_asset(&names, "mac"), NamedAsset::Duplicate));
+    expect_recipe(matches!(installation_asset(&[], "mac"), NamedAsset::Missing));
+    expect_recipe(!uploaded_download(Some("new"), Some("URL"), "URL", Some("hash")));
+    expect_recipe(!uploaded_download(None, Some("URL"), "URL", Some("hash")));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn only_a_copier_product_can_request_the_next_patch() {
     use delivery::{version_policy, VersionPolicy};
     proof {
