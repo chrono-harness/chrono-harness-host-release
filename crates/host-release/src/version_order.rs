@@ -1,10 +1,10 @@
 //! Decimal components are canonical SemVer numbers without a machine-integer limit.
+use std::cmp::Ordering;
 #[cfg(not(verus_keep_ghost))]
 use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 use vstd::slice::slice_to_vec;
-use std::cmp::Ordering;
 #[cfg(verus_keep_ghost)]
 use vstd::string::StringSliceAdditionalSpecFns;
 
