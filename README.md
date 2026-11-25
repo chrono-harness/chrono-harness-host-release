@@ -38,6 +38,10 @@
 
 调用方按固定的 tag 读取提交并用 `template-release-v1` 验证公开预览和资产。GitHub 的比较方向为 head 相对 base。晋升核对成功 dev push 的仓库、工作流、提交、实际正整数运行号和预览标签的规范十进制序号。GitHub 负责提供原始观察，更新 main 时仍须使用非强制快进。
 
+每次安装调用 `resolve-install-v1`，stdin JSON 提供 `repository`、`selector`（`stable`、`preview` 或精确标签）、`assets`（`linux-x64` 和 `macos-arm64` 的实际资产名）及 `releases`（该仓 GitHub REST 全部页的原始 Release 对象数组）。成功返回 `tag`、`version` 和两个平台的 `url`、`checksum`。渠道按 SemVer 选择已公开、非草稿且预发行标记一致的版本。版本优先级相同时按发布时间和标签文本排序。选中版本缺所需资产、上传状态、正确 URL 或 SHA-256 时退出 2。
+
+Shell 安装器可直接运行 `chrono-host-release resolve-install-v1 --mise-tool COMMAND OWNER/REPO SELECTOR LINUX_ASSET MACOS_ASSET PAGE_FILE...`。每个文件是一页原始 JSON 数组；完整读取后，stdout 给出该命令的 mise TOML 安装项。调用方负责从 GitHub 获取全部页，并使用同次返回的 URL 和摘要下载和校验各自的平台文件。
+
 `template-consumer-pin-v1` 从下游已落地清单判定安装版本，成功返回 JSON 数组 `[tag, checksums]`。Copier 请求提供 `kind="copier"`、`repository`、`version`、`rolling` 和解析后的 `answers`，源模板产物的 checksums 为 null。二进制请求提供 `kind="binary"`、`repository`、`version`、`binary` 和 mise 的 `tool` 对象。返回对应 Linux x86_64 与 macOS arm64 安装资产的完整名称和 SHA-256。调用方从该宿主选定提交读取 YAML 或 TOML，随后以返回的标签和摘要核对公开发行。
 
 `template-binary-origins-v1` 从标准输入读取发布者的两个平台观察。根据固定 check、来源 SHA、release run/attempt、构建和上传步骤、artifact ID 与归档、文件 SHA-256 输出来源记录。同一 run 重试时可沿用较早且已经成功的平台作业。GitHub API 的读取与下载，以及下载文件的摘要计算，由发布适配器负责。
