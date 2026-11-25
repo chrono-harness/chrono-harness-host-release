@@ -29,6 +29,13 @@ fn run() -> Result<i32, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     match args.as_slice() {
+        [command, tag] if command == "check-pushed-tag" => {
+            chrono_host_release::identity::check_pushed_tag(tag, |args| {
+                let output = std::process::Command::new("git").args(args).stderr(std::process::Stdio::inherit()).output().map_err(|e|e.to_string())?;
+                Ok((output.status.code().unwrap_or(-1),String::from_utf8(output.stdout).map_err(|e|e.to_string())?))
+            })?;
+            Ok(0)
+        }
         [command] if command == "template-promotion-v1" => {
             let decision = chrono_host_release::template_run::promotion(std::io::stdin().lock())?;
             println!("{}", decision);
@@ -108,7 +115,7 @@ fn run() -> Result<i32, String> {
             frontend::export(Path::new(root), Path::new(output), &std::env::vars_os().collect())?;
             Ok(0)
         },
-        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]\n       chrono-host-release roadmap-v1 | template-run-v1 | template-acceptance-v1 | template-next-version-v1 | template-promotion-v1 | template-release-v1 | template-consumer-pin-v1".into()),
+        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]\n       chrono-host-release check-pushed-tag TAG | roadmap-v1 | template-run-v1 | template-acceptance-v1 | template-next-version-v1 | template-promotion-v1 | template-release-v1 | template-consumer-pin-v1".into()),
     }
 }
 
