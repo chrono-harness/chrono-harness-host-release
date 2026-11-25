@@ -230,6 +230,43 @@ fn release_requires_a_named_successful_step_on_the_selected_job_and_commit() {
     expect_recipe(!delivery::acceptance_job(Some("job"), "job", Some("success"), Some("sha"), "sha", &[], "exercise"));
 }
 
+#[cfg(verus_keep_ghost)]
+fn every_run_identity_field_is_required(omitted: usize)
+    requires omitted < 8,
+{
+    let mut fields = [Some("repo"), Some("repo"), Some("path"), Some("dev"),
+                      Some("sha"), Some("push"), Some("completed"), Some("success")];
+    fields[omitted] = None;
+    assert(omitted == 0 || omitted == 1 || omitted == 2 || omitted == 3
+        || omitted == 4 || omitted == 5 || omitted == 6 || omitted == 7);
+    expect_recipe(!delivery::landed_push(&fields, "repo", "path", "dev", "sha"));
+}
+
+#[cfg(verus_keep_ghost)]
+fn run_command_requires_one_complete_argument(command: String, other: String, first: String, second: String)
+    requires command@ == "template-run-v1"@, other@ != "template-run-v1"@,
+{
+    expect_recipe(command::template_run_command(&[command]));
+    expect_recipe(!command::template_run_command(&[]));
+    expect_recipe(!command::template_run_command(&[other]));
+    expect_recipe(!command::template_run_command(&[first, second]));
+}
+
+#[cfg(verus_keep_ghost)]
+fn decoder_only_relabels_the_reported_duplicate(key: &str, at: &str) {
+    use policy::codec::duplicate_member;
+    proof {
+        reveal_strlit("duplicate entry with key "); reveal_strlit("ordinary error");
+        assert("ordinary error"@.len() != "duplicate entry with key "@.len());
+    }
+    let record = duplicate_member(Some("duplicate entry with key "), Some(key), Some(at));
+    assert(record == Some((key, at)));
+    let unrelated = duplicate_member(Some("ordinary error"), Some(key), Some(at));
+    let no_key = duplicate_member(Some("duplicate entry with key "), None, Some(at));
+    let no_location = duplicate_member(Some("duplicate entry with key "), Some(key), None);
+    assert(unrelated.is_none() && no_key.is_none() && no_location.is_none());
+}
+
 #[cfg_attr(not(verus_keep_ghost), test)]
 fn release_requires_the_selected_successful_push() {
     proof {
