@@ -354,3 +354,168 @@ fn installation_is_bound_to_this_launchers_entire_stdout_and_the_installed_bytes
     fs::write(&file, b"changed").unwrap();
     assert!(verify(Channel::Build, &one).is_err());
 }
+
+#[test]
+fn failure_evidence_uses_the_first_stream_marker_and_shares_the_copy_budget() {
+    use chrono_host_release::evidence::{BOUND, retain};
+    use sha2::{Digest, Sha256};
+    let root = tempfile::tempdir().unwrap();
+    let nested = tempfile::Builder::new()
+        .prefix("chrono-native-publication-failure-")
+        .tempdir()
+        .unwrap();
+    for (name, data) in [
+        ("stdout", &[0, 255][..]),
+        ("stderr", &[10][..]),
+        ("process.json", b"{}"),
+    ] {
+        fs::write(nested.path().join(name), data).unwrap();
+    }
+    let valid = format!(
+        "original native publication process evidence: {}\n",
+        nested.path().display()
+    );
+    let invalid = format!(
+        "original native publication process evidence: {}\n",
+        root.path().display()
+    );
+    let input = root.path().join("diagnostics");
+    fs::create_dir(&input).unwrap();
+    let excess = fs::File::create(input.join("a-large")).unwrap();
+    excess.set_len(BOUND - 4).unwrap();
+    fs::write(input.join("b-small"), [0u8, 254]).unwrap();
+    let directories = ["diagnostics/".to_owned(), "absent/".to_owned()];
+    let output = tempfile::tempdir().unwrap();
+    let stdout = [
+        b"\xff prefix ".as_slice(),
+        valid.as_bytes(),
+        invalid.as_bytes(),
+    ]
+    .concat();
+    let got = retain(
+        root.path(),
+        output.path(),
+        "verification",
+        &directories,
+        &stdout,
+        invalid.as_bytes(),
+    );
+    assert!(got.failures.is_empty(), "{:?}", got.failures);
+    let n = got.nested.unwrap();
+    assert_eq!((&n["status"], &n["bytes"]), (&json!("retained"), &json!(5)));
+    let r = got.registered.unwrap();
+    assert_eq!(r["status"], "partial");
+    assert_eq!(r["bound_bytes"], BOUND - 5);
+    assert_eq!(r["bytes"], 2);
+    assert_eq!(
+        r["sources"],
+        json!([{"source":"diagnostics/","status":"observed"},{"source":"absent/","status":"absent"}])
+    );
+    assert_eq!(
+        r["files"][0],
+        json!({"source":"diagnostics/a-large","status":"omitted","reason":"bounded evidence limit","bytes":BOUND-4})
+    );
+    for (record, expected) in [
+        (&n["files"][0], &[0u8, 255][..]),
+        (&n["files"][1], &[10][..]),
+        (&n["files"][2], b"{}"),
+        (&r["files"][1], &[0, 254][..]),
+    ] {
+        let contents = fs::read(output.path().join(record["path"].as_str().unwrap())).unwrap();
+        assert_eq!(contents, expected);
+        assert_eq!(record["bytes"], expected.len());
+        assert_eq!(record["sha256"], format!("{:x}", Sha256::digest(expected)));
+    }
+    for (stdout, stderr, status) in [
+        (invalid.as_bytes(), valid.as_bytes(), "unavailable"),
+        (&[][..], valid.as_bytes(), "retained"),
+        (
+            b"original native publication process evidence: \xff\n".as_slice(),
+            valid.as_bytes(),
+            "unavailable",
+        ),
+    ] {
+        let output = tempfile::tempdir().unwrap();
+        let result = retain(root.path(), output.path(), "verify", &[], stdout, stderr);
+        let evidence = result.nested.unwrap();
+        assert_eq!(evidence["status"], status);
+        if status == "unavailable" {
+            assert_eq!(result.failures, [evidence["reason"].as_str().unwrap()]);
+        }
+        assert!(result.registered.is_none());
+    }
+}
+
+#[test]
+fn registered_and_nested_read_errors_keep_the_source_and_original_reason() {
+    use chrono_host_release::evidence::retain;
+    use std::os::unix::fs::symlink;
+    let root = tempfile::tempdir().unwrap();
+    let nested = tempfile::Builder::new()
+        .prefix("chrono-native-publication-failure-")
+        .tempdir()
+        .unwrap();
+    let output = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("file"), b"input").unwrap();
+    symlink(root.path().join("file"), root.path().join("link")).unwrap();
+    let marker = format!(
+        "original native publication process evidence: {}",
+        nested.path().display()
+    );
+    let retained = retain(
+        root.path(),
+        output.path(),
+        "verification",
+        &["file/".into(), "link/".into(), "missing/".into()],
+        &[],
+        marker.as_bytes(),
+    );
+    let n = retained.nested.unwrap();
+    assert_eq!(n["status"], "partial");
+    assert_eq!(n["bytes"], 0);
+    for (record, name) in
+        n["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(["stdout", "stderr", "process.json"])
+    {
+        let error = fs::metadata(nested.path().join(name))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            record,
+            &json!({"source":name,"status":"unavailable","reason":error})
+        );
+        assert!(retained.failures.contains(&error));
+    }
+    let r = retained.registered.unwrap();
+    assert_eq!(r["status"], "partial");
+    assert_eq!(r["bytes"], 0);
+    assert_eq!(r["sources"][0]["reason"], "not a regular directory");
+    let reason = format!(
+        "symlink path is not allowed: {}",
+        root.path().join("link").display()
+    );
+    assert_eq!(
+        r["sources"][1],
+        json!({"source":"link/","status":"unavailable","reason":reason})
+    );
+    assert!(retained.failures.contains(&reason));
+    assert_eq!(
+        r["sources"][2],
+        json!({"source":"missing/","status":"absent"})
+    );
+    assert!(
+        retain(
+            root.path(),
+            output.path(),
+            "verify",
+            &[],
+            b"original native publication process\n evidence: ",
+            b""
+        )
+        .nested
+        .is_none()
+    );
+}

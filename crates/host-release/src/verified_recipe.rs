@@ -11,6 +11,9 @@ pub mod codec;
 #[path = "main.rs"]
 pub mod command;
 #[cfg(verus_keep_ghost)]
+#[path = "evidence.rs"]
+pub mod evidence;
+#[cfg(verus_keep_ghost)]
 #[path = "execution.rs"]
 pub mod execution;
 #[cfg(verus_keep_ghost)]

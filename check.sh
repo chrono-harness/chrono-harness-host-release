@@ -38,7 +38,7 @@ stem=${filename#lib}
 stem=${metadata%/*}/${stem%.rmeta}
 chrono-host-bootstrap check-compiler-sources native "$stem" \
   src/lib.rs src/verified_recipe.rs src/codec.rs src/identity.rs src/verified_delivery.rs src/version_order.rs src/recipe.rs \
-  src/frontend.rs src/execution.rs src/receipt.rs src/preview.rs \
+  src/frontend.rs src/evidence.rs src/execution.rs src/receipt.rs src/preview.rs \
   src/process.rs src/transport.rs src/staging.rs src/delivery.rs src/publication.rs src/template_run.rs src/roadmap.rs ||
   coverage_failure "native library differs from required sources"
 
@@ -55,13 +55,13 @@ tests=crates/host-release-tests/tests
 included="$tests/../../host-release/src"
 
 chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe.rlib "$src/verified_recipe.rs" "$src/codec.rs" "$src/main.rs" \
-  "$src/execution.rs" "$src/frontend.rs" \
+  "$src/evidence.rs" "$src/execution.rs" "$src/frontend.rs" \
   "$src/receipt.rs" "$src/recipe.rs" \
   "$src/preview.rs" "$src/staging.rs" \
   "$src/delivery.rs" "$src/publication.rs" \
   "$src/version_order.rs" "$src/roadmap.rs" "$src/verified_delivery.rs" "$src/identity.rs"
 chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe-tests.rlib "$tests/verified_recipe.rs" "$included/verified_recipe.rs" "$included/codec.rs" \
-  "$included/main.rs" "$included/execution.rs" \
+  "$included/main.rs" "$included/evidence.rs" "$included/execution.rs" \
   "$included/frontend.rs" "$included/receipt.rs" \
   "$included/recipe.rs" "$included/preview.rs" \
   "$included/staging.rs" "$included/delivery.rs" \
