@@ -192,6 +192,20 @@ fn exact_install_selects_the_first_published_requested_tag() {
         (Some(false), Some("date"), Some("v1.0.0")),
         (Some(false), Some("date"), Some("v1.0.0")),
     ];
+    proof {
+        reveal_strlit!("date");
+        reveal_strlit!("");
+        reveal_strlit!("v1.0.0");
+        reveal_strlit!("v1.0.0-alpha.1");
+        reveal_strlit!("v1.0.1");
+        assert forall|i:int| 0 <= i < rows.len() implies
+            (policy::version_order::public_exact(#[trigger] rows@[i], "v1.0.0") == (i == 6 || i == 7))
+            && (policy::version_order::public_exact(rows@[i], "v1.0.0-alpha.1") == (i == 4))
+            && !policy::version_order::public_exact(rows@[i], "v1.0.1") by {
+            assert(i == 0 || i == 1 || i == 2 || i == 3 || i == 4 || i == 5 || i == 6 || i == 7);
+            assert("v1.0.0"@[5] != "v1.0.1"@[5]);
+        }
+    }
     expect_recipe(exact_install(&rows, "v1.0.0") == Some(6));
     expect_recipe(exact_install(&rows, "v1.0.0-alpha.1") == Some(4));
     expect_recipe(exact_install(&rows, "v1.0.1").is_none());
