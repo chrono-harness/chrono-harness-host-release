@@ -11,7 +11,7 @@ use verus_builtin_macros::verus;
 use vstd::prelude::*;
 
 verus! {
-pub const DUPLICATE_HEADER: &str = "duplicate entry with key ";
+pub const DUPLICATE_HEADER: &'static str = "duplicate entry with key ";
 
 /// Serde supplies the message and location. The literal decoder supplies the original member name.
 pub fn duplicate_member<'a>(
