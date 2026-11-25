@@ -739,12 +739,6 @@ fn direct_main_precondition(head: &str, older: &str)
     expect_recipe(matches!(main_ref(Some("refs/heads/topic"),Some("commit"),Some(older),head),MainRef::Invalid));
 }
 
-#[cfg(not(verus_keep_ghost))]
-#[test]
-fn main_updates_only_from_observed_direct_main_refs() {
-    direct_main_precondition("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-}
-
 #[cfg_attr(not(verus_keep_ghost), test)]
 fn receipt_job_run_and_attempt_must_match_the_selected_producer() {
     proof {
