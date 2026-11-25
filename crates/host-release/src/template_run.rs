@@ -311,10 +311,14 @@ fn install_release<'a>(selector: &str, releases: &'a [Value]) -> Result<&'a Valu
             }
             Some((version, row["published_at"].as_str()?, tag, row))
         })
-        .max_by(|a, b| {
-            a.0.compare(&b.0)
-                .then_with(|| a.1.cmp(b.1))
-                .then_with(|| a.2.cmp(b.2))
+        .max_by(|(a, a_date, a_tag, _), (b, b_date, b_tag, _)| {
+            let by_date = a_date.cmp(b_date);
+            let priority = if preview {
+                by_date.then_with(|| a.compare(b))
+            } else {
+                a.compare(b).then(by_date)
+            };
+            priority.then_with(|| a_tag.cmp(b_tag))
         })
         .map(|(_, _, _, r)| r)
         .ok_or_else(|| format!("no published {selector} release"))

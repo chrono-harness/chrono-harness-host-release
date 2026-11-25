@@ -780,6 +780,29 @@ fn installation_channels_resolve_the_selected_release_before_its_assets() {
         );
         assert_eq!(result["platforms"]["macos-arm64"]["checksum"], digest);
     }
+    let dated = |tag: &str, preview, published: &str| {
+        let mut release = row(tag, preview);
+        release["published_at"] = json!(published);
+        release
+    };
+    let mut previews = vec![
+        dated("v0.1.0-alpha.24", true, "2026-11-25T08:00:54Z"),
+        dated("v0.1.0-bootstrap.1", true, "2026-11-22T16:54:29Z"),
+    ];
+    assert_eq!(
+        call("preview", &previews).unwrap()["tag"],
+        "v0.1.0-alpha.24"
+    );
+    previews.insert(1, dated("v0.1.0-alpha.25", true, "2026-11-25T10:05:31Z"));
+    assert_eq!(
+        call("preview", &previews).unwrap()["tag"],
+        "v0.1.0-alpha.25"
+    );
+    let stable = [
+        dated("v2.0.0", false, "2026-11-24T00:00:00Z"),
+        dated("v1.9.1", false, "2026-11-25T00:00:00Z"),
+    ];
+    assert_eq!(call("stable", &stable).unwrap()["tag"], "v2.0.0");
     assert!(call("v20.0.0", &releases).is_err());
     assert!(call("v0.0.1", &releases).is_err());
     assert!(call("stable", &[row("v2.0.0-alpha.7", true)]).is_err());
