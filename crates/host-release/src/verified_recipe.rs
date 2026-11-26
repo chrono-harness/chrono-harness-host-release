@@ -51,6 +51,8 @@ pub mod delivery;
 pub mod workflow_identity;
 
 use vstd::contrib::exec_spec::ExecSpecEq;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
 
 verus! {
 
@@ -58,6 +60,16 @@ pub fn same_text(actual: &str, expected: &str) -> (same: bool)
     ensures same == (actual@ == expected@),
 {
     <&str>::exec_eq(actual, expected)
+}
+
+/// The release jobs exercise the actual binary without arguments.
+pub fn release_usage_observed(exit: &str, stderr: &[u8]) -> (accepted: bool)
+    ensures accepted == (exit@ == "2"@ && exists|i: int| roadmap::marker_at(
+        stderr@, "usage: chrono-host-release ROOT ABSENT_OUTPUT".spec_bytes(), i)),
+{
+    let marker = "usage: chrono-host-release ROOT ABSENT_OUTPUT";
+    proof { reveal_strlit("usage: chrono-host-release ROOT ABSENT_OUTPUT"); }
+    same_text(exit, "2") && roadmap::first_marker(stderr, marker.as_bytes()).is_some()
 }
 
 /// 调用者显式提供角色与选择；不根据项目语言、命令或资产数推断 SDK。

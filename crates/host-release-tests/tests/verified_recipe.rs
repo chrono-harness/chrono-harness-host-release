@@ -365,6 +365,23 @@ fn run_command_requires_one_complete_argument(command: String, other: String, fi
 }
 
 #[cfg(verus_keep_ghost)]
+fn release_probe_rejects_wrong_exit_and_missing_text(stderr: &[u8])
+{
+    let marker = "usage: chrono-host-release ROOT ABSENT_OUTPUT";
+    proof {
+        reveal_strlit("usage: chrono-host-release ROOT ABSENT_OUTPUT");
+        reveal_strlit("0"); reveal_strlit("2");
+        assert("0"@[0] != "2"@[0]);
+        assert(marker.spec_bytes().subrange(0, marker.spec_bytes().len() as int) =~= marker.spec_bytes());
+        assert(policy::roadmap::marker_at(marker.spec_bytes(), marker.spec_bytes(), 0));
+    }
+    let valid = policy::release_usage_observed("2", marker.as_bytes());
+    let success_exit = policy::release_usage_observed("0", stderr);
+    let missing = policy::release_usage_observed("2", &[]);
+    assert(valid && !success_exit && !missing);
+}
+
+#[cfg(verus_keep_ghost)]
 fn installer_receives_the_complete_page_result(error: String) {
     let more = command::release_page_output(Ok(true));
     let last = command::release_page_output(Ok(false));
