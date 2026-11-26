@@ -1,11 +1,30 @@
 //! Respond only to the exact command declared by the test in its temporary cwd.
+#[cfg(not(verus_keep_ghost))]
+use vstd::prelude::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+fn payload_size(len: usize, kind: u8, truncated: bool) -> (sent: usize)
+    ensures sent <= len,
+        kind == 84u8 && truncated && len > 0 ==> sent + 1 == len,
+        kind != 84u8 || !truncated || len == 0 ==> sent == len,
+{
+    if kind == 84u8 && truncated && len > 0 { len - 1 } else { len }
+}
+}
+
+#[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
+#[cfg(not(verus_keep_ghost))]
 use sha2::{Digest, Sha256};
+#[cfg(not(verus_keep_ghost))]
 use std::{
     env, fs,
     io::{Read, Write},
     process::ExitCode,
 };
+#[cfg(not(verus_keep_ghost))]
 fn main() -> ExitCode {
     let replies: Value = serde_json::from_slice(&fs::read("mock.json").unwrap()).unwrap();
     let args: Vec<_> = env::args().skip(1).collect();
@@ -32,7 +51,12 @@ fn main() -> ExitCode {
         );
         let stdout = reply["stdout"].as_str().unwrap().as_bytes();
         let stderr = reply["stderr"].as_str().unwrap().as_bytes();
-        let hash = |b: &[u8]| format!("{:x}", Sha256::digest(b));
+        let hash = |b: &[u8]| {
+            Sha256::digest(b)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        };
         let mut receipt = json!({"argv":spec["args"],"cwd":env::current_dir().unwrap(),"launcher_pid":std::process::id(),"child_pid":78,"executable":spec["program"],"sha256":header["expected_sha256"],"environment_digest":"env","exit_signal":null,"exit_code":reply["exit"],"failure":null,"stdout_complete":true,"stderr_complete":true,"stdout_size":stdout.len(),"stderr_size":stderr.len(),"stdout_sha256":hash(stdout),"stderr_sha256":hash(stderr)});
         match reply["fault"].as_str() {
             Some("digest") => receipt["stdout_sha256"] = json!("changed"),
@@ -45,11 +69,8 @@ fn main() -> ExitCode {
         for (kind, bytes) in [(b'O', stdout), (b'E', stderr), (b'T', terminal.as_slice())] {
             out.write_all(&[kind]).unwrap();
             out.write_all(&(bytes.len() as u64).to_be_bytes()).unwrap();
-            if kind == b'T' && reply["fault"] == "truncated" {
-                out.write_all(&bytes[..bytes.len() - 1]).unwrap();
-            } else {
-                out.write_all(bytes).unwrap();
-            }
+            let sent = payload_size(bytes.len(), kind, reply["fault"] == "truncated");
+            out.write_all(&bytes[..sent]).unwrap();
         }
         if reply["fault"] == "trailing" {
             out.write_all(b"x").unwrap();

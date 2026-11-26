@@ -1,7 +1,11 @@
+#[cfg(not(verus_keep_ghost))]
 use chrono_host_release::{bootstrap, committed::Committed, execution::Environment};
+#[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
+#[cfg(not(verus_keep_ghost))]
 use std::{ffi::OsString, fs, os::unix::ffi::OsStringExt, path::Path};
 
+#[cfg(not(verus_keep_ghost))]
 fn mock(root: &Path, name: &str) -> Environment {
     fs::copy(
         env!("CARGO_BIN_EXE_chrono-release-query-mock"),
@@ -23,6 +27,7 @@ fn mock(root: &Path, name: &str) -> Environment {
     .collect()
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn replies(root: &Path, commands: &[(&[&str], Value)]) {
     let map: serde_json::Map<String, Value> = commands
         .iter()
@@ -277,7 +282,6 @@ fn installation_is_bound_to_this_launchers_entire_stdout_and_the_installed_bytes
         delivery::verify_installation_stdout,
         identity::{Channel, Identity},
     };
-    use sha2::{Digest, Sha256};
     use std::{collections::BTreeSet, os::unix::fs::PermissionsExt};
     let dir = tempfile::tempdir().unwrap();
     let host = dir.path();
@@ -286,7 +290,7 @@ fn installation_is_bound_to_this_launchers_entire_stdout_and_the_installed_bytes
     fs::create_dir_all(file.parent().unwrap()).unwrap();
     fs::write(&file, b"tool").unwrap();
     fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
-    let hash = format!("{:x}", Sha256::digest(b"tool"));
+    let hash = "7c9bbe5ec9b3fb774e8fa0f54247e93c34ddf8e5d16fe3073420de0ae81a262d";
     let members = BTreeSet::from(["tool".to_string()]);
     let tools = json!({"tool":{"sha256":hash,"size":4}});
     let identity = Identity {
@@ -358,7 +362,6 @@ fn installation_is_bound_to_this_launchers_entire_stdout_and_the_installed_bytes
 #[test]
 fn failure_evidence_uses_the_first_stream_marker_and_shares_the_copy_budget() {
     use chrono_host_release::evidence::{BOUND, retain};
-    use sha2::{Digest, Sha256};
     let root = tempfile::tempdir().unwrap();
     let nested = tempfile::Builder::new()
         .prefix("chrono-native-publication-failure-")
@@ -415,16 +418,32 @@ fn failure_evidence_uses_the_first_stream_marker_and_shares_the_copy_budget() {
         r["files"][0],
         json!({"source":"diagnostics/a-large","status":"omitted","reason":"bounded evidence limit","bytes":BOUND-4})
     );
-    for (record, expected) in [
-        (&n["files"][0], &[0u8, 255][..]),
-        (&n["files"][1], &[10][..]),
-        (&n["files"][2], b"{}"),
-        (&r["files"][1], &[0, 254][..]),
+    for (record, expected, sha256) in [
+        (
+            &n["files"][0],
+            &[0u8, 255][..],
+            "06eb7d6a69ee19e5fbdf749018d3d2abfa04bcbd1365db312eb86dc7169389b8",
+        ),
+        (
+            &n["files"][1],
+            &[10][..],
+            "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        ),
+        (
+            &n["files"][2],
+            b"{}",
+            "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        ),
+        (
+            &r["files"][1],
+            &[0, 254][..],
+            "dcc3494d498009f15481bc423aeabcc2f8f5b0e6109192491eda8458032c8db6",
+        ),
     ] {
         let contents = fs::read(output.path().join(record["path"].as_str().unwrap())).unwrap();
         assert_eq!(contents, expected);
         assert_eq!(record["bytes"], expected.len());
-        assert_eq!(record["sha256"], format!("{:x}", Sha256::digest(expected)));
+        assert_eq!(record["sha256"], sha256);
     }
     for (stdout, stderr, status) in [
         (invalid.as_bytes(), valid.as_bytes(), "unavailable"),
@@ -518,4 +537,24 @@ fn registered_and_nested_read_errors_keep_the_source_and_original_reason() {
         .nested
         .is_none()
     );
+}
+
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+#[cfg(verus_keep_ghost)]
+verus! {
+/// Decode each emitted pair independently and recover the original byte.
+fn wire_hex_roundtrips(digest: &[u8; 32], index: usize)
+    requires index < 32,
+{
+    let text = super::policy::files::digest_ascii(digest);
+    let hi = text[2*index];
+    let lo = text[2*index+1];
+    assert(48u8 <= hi <= 57u8 || 97u8 <= hi <= 102u8);
+    assert(48u8 <= lo <= 57u8 || 97u8 <= lo <= 102u8);
+    let high = if hi <= 57u8 { hi - 48u8 } else { hi - 97u8 + 10 };
+    let low = if lo <= 57u8 { lo - 48u8 } else { lo - 97u8 + 10 };
+    assert(high as int * 16 + low as int == digest@[index as int] as int);
+}
 }

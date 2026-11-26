@@ -17,6 +17,9 @@ pub mod evidence;
 #[path = "execution.rs"]
 pub mod execution;
 #[cfg(verus_keep_ghost)]
+#[path = "files.rs"]
+pub mod files;
+#[cfg(verus_keep_ghost)]
 #[path = "frontend.rs"]
 pub mod frontend;
 #[cfg(verus_keep_ghost)]

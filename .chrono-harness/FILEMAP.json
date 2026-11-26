@@ -553,7 +553,16 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
     },
     {
       "path": "crates/host-release-tests/tests/proof_support/host-release/publication.rs",
@@ -712,7 +721,16 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
     },
     {
       "path": "crates/host-release-tests/tests/registrations.rs",
@@ -913,7 +931,20 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
     },
     {
       "path": "crates/host-release/src/frontend.rs",
