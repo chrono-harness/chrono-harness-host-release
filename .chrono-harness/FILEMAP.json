@@ -264,7 +264,16 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/host_setup.rs",
+            "operation": "verify.host-setup"
+          }
+        ]
+      }
     },
     {
       "path": ".config/mise/conf.d/selected-chrono-harness.toml",
@@ -424,7 +433,11 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
     },
     {
       "path": "crates/host-release-tests/Cargo.toml",
@@ -440,6 +453,27 @@
       "verification": {
         "role": "data",
         "roots": []
+      }
+    },
+    {
+      "path": "crates/host-release-tests/tests/host_setup.rs",
+      "owner": "host-release-tests",
+      "surface": "test",
+      "cost": "unmeasured",
+      "edges": [
+        {
+          "kind": "test-execution",
+          "to": "test:host-release-tests"
+        }
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/host_setup.rs",
+            "operation": "verify.host-setup"
+          }
+        ]
       }
     },
     {
@@ -1259,6 +1293,7 @@
         "prepare.release-proof-directory",
         "verify.release-recipe",
         "verify.release-recipe-tests",
+        "verify.host-setup",
         "host-release.owner-check"
       ],
       "timeout_seconds": 600,
