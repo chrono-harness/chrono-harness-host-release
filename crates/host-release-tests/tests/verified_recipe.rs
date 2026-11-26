@@ -42,6 +42,40 @@ mod tool_fixture;
 
 verus! {
 #[cfg(verus_keep_ghost)]
+fn retained_identity_and_write_budget(
+    before: policy::evidence::FileIdentity,
+    after: policy::evidence::FileIdentity,
+    bytes: &[u8],
+    previous: u64,
+    write_error: Option<u8>,
+)
+    requires previous as int + before.len as int <= u64::MAX,
+{
+    let mut used = previous;
+    let total = previous + before.len;
+    let result = policy::evidence::publish_observed(before, after, bytes, &mut used, total,
+        |actual: &[u8]| -> (r: Result<(), u8>)
+            requires before == after, actual@ == bytes@, actual.len() == before.len,
+            ensures r == match write_error { None => Ok::<(),u8>(()), Some(error) => Err(error) },
+        {
+            match write_error { Some(error) => Err(error), None => Ok(()) }
+        });
+    let changed = before.dev != after.dev || before.ino != after.ino || before.len != after.len
+        || before.mtime != after.mtime || before.mtime_nsec != after.mtime_nsec
+        || bytes.len() as u64 != before.len;
+    if changed {
+        assert(result == Ok::<bool,u8>(false));
+        assert(used == previous);
+    } else if let Some(error) = write_error {
+        assert(result == Err::<bool,u8>(error));
+        assert(used == previous);
+    } else {
+        assert(result == Ok::<bool,u8>(true));
+        assert(used as int == previous as int + bytes.len() as int);
+    }
+}
+
+#[cfg(verus_keep_ghost)]
 fn retained_bytes_and_directory_boundaries(size: u64) {
     use policy::evidence::{bytes_after_copy, group_status, nested_eligible};
     let exact = bytes_after_copy(size, 0, size);
