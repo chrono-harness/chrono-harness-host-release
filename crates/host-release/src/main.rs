@@ -31,6 +31,36 @@ pub fn pushed_tag_command(args: &[String]) -> (requested: Option<bool>)
     }
 }
 
+/// Only the exact installer's paging command selects a response-header file.
+pub fn release_page_headers(args: &[String]) -> (headers: Option<&str>)
+    ensures
+        headers.is_some() == (args.len() == 3 && args@[0]@ == "resolve-install-v1"@
+            && args@[1]@ == "--page-state"@),
+        headers.is_some() ==> headers.unwrap()@ == args@[2]@,
+{
+    if args.len() == 3 && same_text(args[0].as_str(), "resolve-install-v1")
+        && same_text(args[1].as_str(), "--page-state") {
+        Some(args[2].as_str())
+    } else {
+        None
+    }
+}
+
+/// The generated installer consumes these two complete tokens or the original parser error.
+pub fn release_page_output(observed: Result<bool, String>) -> (out: Result<&'static str, String>)
+    ensures match observed {
+        Ok(true) => out is Ok && out.unwrap()@ == "next"@,
+        Ok(false) => out is Ok && out.unwrap()@ == "done"@,
+        Err(error) => out is Err && out.unwrap_err()@ == error@,
+    },
+{
+    match observed {
+        Ok(true) => Ok("next"),
+        Ok(false) => Ok("done"),
+        Err(error) => Err(error),
+    }
+}
+
 pub fn select_preview_command(flag: &str) -> (selected: bool)
     ensures selected == (flag@ == "--select-preview"@),
 {
@@ -75,6 +105,13 @@ fn run() -> Result<i32, String> {
             .map_err(|e| e.to_string())?;
         return Ok(0);
     }
+    if let Some(headers) = release_page_headers(&args) {
+        let raw = std::fs::read_to_string(headers).map_err(|e| format!("{headers}: {e}"))?;
+        let output =
+            release_page_output(chrono_host_release::template_run::release_page_state(&raw))?;
+        println!("{output}");
+        return Ok(0);
+    }
     match args.as_slice() {
         [command] if command == "template-promotion-v1" => {
             let decision = chrono_host_release::template_run::promotion(std::io::stdin().lock())?;
@@ -88,12 +125,6 @@ fn run() -> Result<i32, String> {
         },
         [command] if command == "template-acceptance-v1" => {
             chrono_host_release::template_run::acceptance(std::io::stdin().lock())?;
-            Ok(0)
-        },
-        [command, flag, headers] if command == "resolve-install-v1" && flag == "--page-state" => {
-            let raw = std::fs::read_to_string(headers).map_err(|e| format!("{headers}: {e}"))?;
-            let next = chrono_host_release::template_run::release_page_state(&raw)?;
-            println!("{}", if next { "next" } else { "done" });
             Ok(0)
         },
         [command, flag, binary, repo, selector, linux, macos, pages @ ..] if command == "resolve-install-v1" && flag == "--mise-tool" => {
