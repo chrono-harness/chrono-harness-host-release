@@ -42,6 +42,38 @@ mod tool_fixture;
 
 verus! {
 #[cfg(verus_keep_ghost)]
+fn registration_keeps_only_the_applicable_stream(stdout: Vec<u8>, diagnostic: Vec<u8>, code: i32)
+    requires code != 0, diagnostic.len() > 0,
+{
+    use policy::registrations::{Reply, registration_reply};
+    let ok = registration_reply(0, stdout, diagnostic);
+    assert(ok matches Reply::Decode(bytes) && bytes == stdout);
+    let empty = registration_reply(code, Vec::new(), Vec::new());
+    assert(empty matches Reply::Exit(status) && status == code);
+}
+
+#[cfg(verus_keep_ghost)]
+fn registration_keeps_the_entire_diagnostic_through_utf8_decoding(stdout: Vec<u8>, stderr: Vec<u8>, code: i32)
+    requires code != 0, stderr.len() > 0,
+{
+    let reply = policy::registrations::registration_reply(code, stdout, stderr);
+    assert(reply matches policy::registrations::Reply::Diagnostic(bytes) && bytes == stderr);
+}
+
+#[cfg(verus_keep_ghost)]
+fn diagnostic_removes_only_one_final_lf(bytes: &[u8])
+{
+    let n = policy::registrations::diagnostic_length(bytes);
+    if bytes.len() > 0 && bytes[bytes.len() - 1] == 10 {
+        assert(n + 1 == bytes.len());
+        assert(bytes@.take(n as int) + seq![10u8] == bytes@);
+    } else {
+        assert(n == bytes.len());
+    }
+}
+
+
+#[cfg(verus_keep_ghost)]
 fn retained_identity_and_write_budget(
     before: policy::evidence::FileIdentity,
     after: policy::evidence::FileIdentity,

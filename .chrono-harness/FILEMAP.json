@@ -421,7 +421,16 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
     },
     {
       "path": "crates/host-release-tests/Cargo.lock",
@@ -702,7 +711,11 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
     },
     {
       "path": "crates/host-release/Cargo.toml",
@@ -714,7 +727,11 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "data",
+        "roots": []
+      }
     },
     {
       "path": "crates/host-release/src/bootstrap.rs",
@@ -1085,7 +1102,20 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release/src/verified_recipe.rs",
+            "operation": "verify.release-recipe"
+          },
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
     },
     {
       "path": "crates/host-release/src/roadmap.rs",
