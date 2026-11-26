@@ -26,6 +26,9 @@ pub mod receipt;
 #[path = "recipe.rs"]
 pub mod recipe;
 #[cfg(verus_keep_ghost)]
+#[path = "registrations.rs"]
+pub mod registrations;
+#[cfg(verus_keep_ghost)]
 #[path = "staging.rs"]
 pub mod staging;
 #[cfg(not(verus_keep_ghost))]
