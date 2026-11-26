@@ -12,6 +12,8 @@
 
 安装本仓清单固定的 chrono-judge-registration，并放入 PATH。发布配方从 execution-methods 读取登记方法，预览按固定提交读取登记字节，并从 test-owners 取得测试归属。两项查询的子进程使用宿主所选 chrono-harness 所在的目录作为 PATH，以调用同一份 runner。
 
+标签触发的发布工作流可调用 `chrono-host-release check-pushed-tag TAG --prerelease`。正式标签通过 main 检查后输出一行 `false`，预览标签通过 dev 历史检查后输出一行 `true`。拒绝时退出 2 并向 stderr 报错，stdout 为空。省略 `--prerelease` 时只通过退出码报告准入。
+
 本仓发行在 Linux x86_64 和 macOS arm64 分别构建。安装或回退时从同一标签读取二进制和 SHA256SUMS，核对对应平台摘要。
 
 原生发行前端使用 PATH 中提供 `original-report-v1` 的 chrono-host-bootstrap 验收构建原件。本仓安装清单固定该工具的发行版本与两平台摘要。导出从宿主根目录读取登记的构建报告与操作流；历史验收向报告生产者传入原提交和原树。发布配方及工作流由 release 自己从宿主的固定 Git 树读取。
