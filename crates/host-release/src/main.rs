@@ -107,7 +107,8 @@ fn run() -> Result<i32, String> {
     }
     if let Some(headers) = release_page_headers(&args) {
         let raw = std::fs::read_to_string(headers).map_err(|e| format!("{headers}: {e}"))?;
-        let output = release_page_output(chrono_host_release::template_run::release_page_state(&raw))?;
+        let output =
+            release_page_output(chrono_host_release::template_run::release_page_state(&raw))?;
         println!("{output}");
         return Ok(0);
     }
