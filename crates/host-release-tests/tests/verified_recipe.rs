@@ -378,12 +378,14 @@ fn installer_receives_the_complete_page_result(error: String) {
 fn installer_forwards_only_its_page_headers(args: &[String])
 {
     let actual = command::release_page_headers(args);
-    if args.len() != 3 {
-        assert(actual.is_none());
-    } else if args[0]@ == "resolve-install-v1"@ && args[1]@ == "--page-state"@ {
-        assert(actual.is_some() && actual.unwrap()@ == args[2]@);
-    } else {
-        assert(actual.is_none());
+    proof {
+        if args.len() != 3 {
+            assert(actual.is_none());
+        } else if args[0]@ == "resolve-install-v1"@ && args[1]@ == "--page-state"@ {
+            assert(actual.is_some() && actual.unwrap()@ == args[2]@);
+        } else {
+            assert(actual.is_none());
+        }
     }
 }
 
