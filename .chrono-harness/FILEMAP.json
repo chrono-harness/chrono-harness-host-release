@@ -421,7 +421,16 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/verified_recipe.rs",
+            "operation": "verify.release-recipe-tests"
+          }
+        ]
+      }
     },
     {
       "path": "crates/host-release-tests/Cargo.lock",
