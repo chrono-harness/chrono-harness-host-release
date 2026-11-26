@@ -96,7 +96,7 @@ fn retained_bytes_and_directory_boundaries(size: u64) {
 
 #[cfg(verus_keep_ghost)]
 fn pushed_tags_separate_stable_main_from_dev_and_refuse_empty_suffixes() {
-    use policy::workflow_identity::{tag_branch, pushed_dev};
+    use policy::workflow_identity::{tag_branch, pushed_dev, pushed_tag_output};
     let major=[118u8,48,49]; let minor=[50u8]; let patch=[51u8]; let suffix=[45u8,46,65];
     proof { assert(major@ =~= seq![118u8,48,49]); assert(minor@ =~= seq![50u8]); assert(patch@ =~= seq![51u8]); assert(suffix@ =~= seq![45u8,46,65]); }
     let parts: [&[u8];3]=[&major,&minor,&patch];
@@ -104,6 +104,13 @@ fn pushed_tags_separate_stable_main_from_dev_and_refuse_empty_suffixes() {
     let bad=tag_branch(&parts,Some(&[]));
     let ancestor=pushed_dev(0); let other=pushed_dev(1); let failed=pushed_dev(128);
     assert(good is Main && preview is Dev && bad is Invalid && ancestor && !other && !failed);
+    let stable = pushed_tag_output(&good, true);
+    let prerelease = pushed_tag_output(&preview, true);
+    let quiet_stable = pushed_tag_output(&good, false);
+    let quiet_preview = pushed_tag_output(&preview, false);
+    let invalid = pushed_tag_output(&bad, true);
+    assert(stable@ == "false\n"@ && prerelease@ == "true\n"@);
+    assert(quiet_stable@ == ""@ && quiet_preview@ == ""@ && invalid@ == ""@);
 }
 
 

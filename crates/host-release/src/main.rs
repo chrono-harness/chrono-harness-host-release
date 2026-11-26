@@ -14,6 +14,23 @@ pub fn template_run_command(args: &[String]) -> (selected: bool)
     args.len() == 1 && same_text(args[0].as_str(), "template-run-v1")
 }
 
+pub fn pushed_tag_command(args: &[String]) -> (requested: Option<bool>)
+    ensures
+        (requested == Some(false)) == (args.len() == 2 && args@[0]@ == "check-pushed-tag"@),
+        (requested == Some(true)) == (args.len() == 3 && args@[0]@ == "check-pushed-tag"@
+            && args@[2]@ == "--prerelease"@),
+{
+    if args.len() < 2 || !same_text(args[0].as_str(), "check-pushed-tag") {
+        None
+    } else if args.len() == 2 {
+        Some(false)
+    } else if args.len() == 3 && same_text(args[2].as_str(), "--prerelease") {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 pub fn select_preview_command(flag: &str) -> (selected: bool)
     ensures selected == (flag@ == "--select-preview"@),
 {
@@ -38,14 +55,27 @@ fn run() -> Result<i32, String> {
         chrono_host_release::template_run::check(std::io::stdin().lock())?;
         return Ok(0);
     }
+    if let Some(requested) = pushed_tag_command(&args) {
+        use chrono_host_release::identity::{admitted_tag_branch, pushed_tag_output};
+        use std::io::Write;
+        let branch = admitted_tag_branch(&args[1], |args| {
+            let output = std::process::Command::new("git")
+                .args(args)
+                .stderr(std::process::Stdio::inherit())
+                .output()
+                .map_err(|e| e.to_string())?;
+            Ok((
+                output.status.code().unwrap_or(-1),
+                String::from_utf8(output.stdout).map_err(|e| e.to_string())?,
+            ))
+        })?;
+        std::io::stdout()
+            .lock()
+            .write_all(pushed_tag_output(&branch, requested).as_bytes())
+            .map_err(|e| e.to_string())?;
+        return Ok(0);
+    }
     match args.as_slice() {
-        [command, tag] if command == "check-pushed-tag" => {
-            chrono_host_release::identity::check_pushed_tag(tag, |args| {
-                let output = std::process::Command::new("git").args(args).stderr(std::process::Stdio::inherit()).output().map_err(|e|e.to_string())?;
-                Ok((output.status.code().unwrap_or(-1),String::from_utf8(output.stdout).map_err(|e|e.to_string())?))
-            })?;
-            Ok(0)
-        }
         [command] if command == "template-promotion-v1" => {
             let decision = chrono_host_release::template_run::promotion(std::io::stdin().lock())?;
             println!("{}", decision);
@@ -137,7 +167,7 @@ fn run() -> Result<i32, String> {
             frontend::export(Path::new(root), Path::new(output), &std::env::vars_os().collect())?;
             Ok(0)
         },
-        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]\n       chrono-host-release check-pushed-tag TAG | roadmap-v1 | template-run-v1 | template-acceptance-v1 | template-next-version-v1 | template-promotion-v1 | template-release-v1 | template-consumer-pin-v1".into()),
+        _ => Err("usage: chrono-host-release ROOT ABSENT_OUTPUT [--unit ID | --collect | --export-frontend | --deliver CONFIG | --install CONFIG NATIVE | --plan-preview CONFIG REQUEST | --select-preview CONFIG COLLECTION]\n       chrono-host-release check-pushed-tag TAG [--prerelease] | roadmap-v1 | template-run-v1 | template-acceptance-v1 | template-next-version-v1 | template-promotion-v1 | template-release-v1 | template-consumer-pin-v1".into()),
     }
 }
 

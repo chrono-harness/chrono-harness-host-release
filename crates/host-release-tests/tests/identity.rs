@@ -608,17 +608,17 @@ fn workflow_rejects_the_first_invalid_input_before_reading_a_git_blob() {
 
 #[test]
 fn a_pushed_tag_checks_only_the_branch_required_by_its_exact_grammar() {
-    use chrono_host_release::identity::check_pushed_tag;
+    use chrono_host_release::identity::{admitted_tag_branch, pushed_tag_output};
     use std::collections::VecDeque;
-    fn run(tag: &str, replies: &[(&[&str], i32, &str)]) -> Result<(), String> {
+    fn run(tag: &str, replies: &[(&[&str], i32, &str)]) -> Result<&'static str, String> {
         let mut calls: VecDeque<_> = replies.iter().collect();
-        let result = check_pushed_tag(tag, |args| {
+        let result = admitted_tag_branch(tag, |args| {
             let (expected, status, stdout) = calls.pop_front().expect("unexpected Git invocation");
             assert_eq!(args, *expected);
             Ok((*status, (*stdout).into()))
         });
         assert!(calls.is_empty());
-        result
+        result.map(|branch| pushed_tag_output(&branch, true))
     }
     let head: &[&str] = &["rev-parse", "HEAD"];
     let main: &[&str] = &["rev-parse", "refs/remotes/origin/main"];
@@ -629,11 +629,17 @@ fn a_pushed_tag_checks_only_the_branch_required_by_its_exact_grammar() {
         "refs/remotes/origin/dev",
     ];
     for tag in ["v1.2.3", "v00.2.003"] {
-        run(tag, &[(head, 0, SOURCE), (main, 0, SOURCE)]).unwrap();
+        assert_eq!(
+            run(tag, &[(head, 0, SOURCE), (main, 0, SOURCE)]).unwrap(),
+            "false\n"
+        );
         assert!(run(tag, &[(head, 0, SOURCE), (main, 0, TREE)]).is_err());
     }
     for tag in ["v1.2.3-alpha.1", "v1.2.3--", "v1.2.3-."] {
-        run(tag, &[(head, 0, SOURCE), (ancestry, 0, "")]).unwrap();
+        assert_eq!(
+            run(tag, &[(head, 0, SOURCE), (ancestry, 0, "")]).unwrap(),
+            "true\n"
+        );
         for code in [1, 128] {
             assert!(run(tag, &[(head, 0, SOURCE), (ancestry, code, "")]).is_err());
         }

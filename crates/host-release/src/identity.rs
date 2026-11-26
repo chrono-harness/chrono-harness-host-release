@@ -15,6 +15,20 @@ verus! {
 /// prerelease suffix made of letters, digits, dots or hyphens.
 pub enum TagBranch { Main, Dev, Invalid }
 
+/// Output for an admitted pushed tag. The ordinary admission command is silent.
+pub fn pushed_tag_output(branch: &TagBranch, requested: bool) -> (line: &'static str)
+    ensures
+        (requested && branch is Main) ==> line@ == "false\n"@,
+        (requested && branch is Dev) ==> line@ == "true\n"@,
+        (!requested || branch is Invalid) ==> line@ == ""@,
+{
+    match branch {
+        TagBranch::Main if requested => "false\n",
+        TagBranch::Dev if requested => "true\n",
+        _ => "",
+    }
+}
+
 pub open spec fn digit(b: u8) -> bool { 48 <= b <= 57 }
 pub open spec fn preview_char(b: u8) -> bool {
     digit(b) || 65 <= b <= 90 || 97 <= b <= 122 || b == 46 || b == 45
@@ -389,8 +403,16 @@ pub fn resolve(
 #[cfg(not(verus_keep_ghost))]
 pub fn check_pushed_tag(
     tag: &str,
-    mut git: impl FnMut(&[&str]) -> Result<(i32, String), String>,
+    git: impl FnMut(&[&str]) -> Result<(i32, String), String>,
 ) -> Result<(), String> {
+    admitted_tag_branch(tag, git).map(|_| ())
+}
+
+#[cfg(not(verus_keep_ghost))]
+pub fn admitted_tag_branch(
+    tag: &str,
+    mut git: impl FnMut(&[&str]) -> Result<(i32, String), String>,
+) -> Result<TagBranch, String> {
     let (core, suffix) = match tag.split_once('-') {
         Some((core, suffix)) => (core, Some(suffix.as_bytes())),
         None => (tag, None),
@@ -416,7 +438,7 @@ pub fn check_pushed_tag(
         TagBranch::Main => {
             let main = revision("refs/remotes/origin/main")?;
             if pushed_main(&source, &main) {
-                Ok(())
+                Ok(branch)
             } else {
                 Err("stable release source differs from main".into())
             }
@@ -429,7 +451,7 @@ pub fn check_pushed_tag(
                 "refs/remotes/origin/dev",
             ])?;
             if pushed_dev(exit) {
-                Ok(())
+                Ok(branch)
             } else {
                 Err(format!("git merge-base --is-ancestor exited {exit}"))
             }
