@@ -88,6 +88,44 @@ pub(crate) fn bytes_after_copy(bound: u64, used: u64, size: u64) -> (total: Opti
     if used > bound || size > bound - used { None } else { Some(used + size) }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct FileIdentity {
+    pub dev: u64,
+    pub ino: u64,
+    pub len: u64,
+    pub mtime: i64,
+    pub mtime_nsec: i64,
+}
+
+/// The caller has reserved the observed file size and supplies the actual write and flush.
+pub(crate) fn publish_observed<'a, E, F>(
+    before: FileIdentity,
+    after: FileIdentity,
+    bytes: &'a [u8],
+    used: &mut u64,
+    total: u64,
+    publish: F,
+) -> (out: Result<bool, E>)
+    where F: FnOnce(&'a [u8]) -> Result<(), E>,
+    requires total as int == *old(used) as int + before.len as int,
+        before == after && bytes.len() == before.len ==> publish.requires((bytes,)),
+    ensures
+        out matches Ok(false) <==> before != after || bytes.len() != before.len,
+        out matches Ok(true) ==> publish.ensures((bytes,), Ok(())),
+        match out { Err(e) => publish.ensures((bytes,), Err(e)), Ok(_) => true },
+        *used as int == *old(used) as int + (if out matches Ok(true) { bytes.len() as int } else { 0 }),
+{
+    if bytes.len() as u64 != before.len || before.dev != after.dev || before.ino != after.ino
+        || before.len != after.len || before.mtime != after.mtime
+        || before.mtime_nsec != after.mtime_nsec
+    {
+        return Ok(false);
+    }
+    publish(bytes)?;
+    *used = total;
+    Ok(true)
+}
+
 pub(crate) fn nested_eligible(absolute: bool, directory: bool, parent_is_temp: bool, native_name: bool) -> (eligible: bool)
     ensures eligible == (absolute && directory && parent_is_temp && native_name),
 { absolute && directory && parent_is_temp && native_name }
@@ -95,6 +133,19 @@ pub(crate) fn nested_eligible(absolute: bool, directory: bool, parent_is_temp: b
 pub(crate) fn group_status(sources_available: bool, all_files_retained: bool) -> (label: &'static str)
     ensures label@ == (if sources_available && all_files_retained { "retained"@ } else { "partial"@ }),
 { if sources_available && all_files_retained { "retained" } else { "partial" } }
+}
+
+#[cfg(not(verus_keep_ghost))]
+impl From<&fs::Metadata> for FileIdentity {
+    fn from(meta: &fs::Metadata) -> Self {
+        Self {
+            dev: meta.dev(),
+            ino: meta.ino(),
+            len: meta.len(),
+            mtime: meta.mtime(),
+            mtime_nsec: meta.mtime_nsec(),
+        }
+    }
 }
 
 #[cfg(not(verus_keep_ghost))]
@@ -142,37 +193,32 @@ impl Collector<'_> {
                 .read_to_end(&mut raw)
                 .map_err(|e| e.to_string())?;
             let after = input.metadata().map_err(|e| e.to_string())?;
-            if raw.len() as u64 != metadata.len()
-                || (
-                    metadata.dev(),
-                    metadata.ino(),
-                    metadata.len(),
-                    metadata.mtime(),
-                    metadata.mtime_nsec(),
-                ) != (
-                    after.dev(),
-                    after.ino(),
-                    after.len(),
-                    after.mtime(),
-                    after.mtime_nsec(),
-                )
-            {
+            let copied = publish_observed(
+                FileIdentity::from(&metadata),
+                FileIdentity::from(&after),
+                &raw,
+                &mut self.used,
+                total,
+                |bytes| {
+                    relative_path(destination)?;
+                    let target = crate::files::prepare_publication(self.output, destination)?;
+                    let mut target = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(target)
+                        .map_err(|e| e.to_string())?;
+                    target
+                        .write_all(bytes)
+                        .and_then(|()| target.flush())
+                        .map_err(|e| e.to_string())?;
+                    Ok::<(), String>(())
+                },
+            )?;
+            if !copied {
                 record["reason"] = json!("source changed during retention");
                 record["bytes"] = json!(raw.len());
                 return Ok(());
             }
-            relative_path(destination)?;
-            let target = crate::files::prepare_publication(self.output, destination)?;
-            let mut target = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(target)
-                .map_err(|e| e.to_string())?;
-            target
-                .write_all(&raw)
-                .and_then(|()| target.flush())
-                .map_err(|e| e.to_string())?;
-            self.used = total;
             record = json!({"source":relative,"status":"retained","path":destination,"bytes":raw.len(),"sha256":crate::files::sha256(&raw)});
             Ok(())
         })();
