@@ -34,3 +34,10 @@ bench = false
 [[example]]
 name = "release_observation"
 path = "tests/proof_support/host-release/support/release_tool.rs"
+
+[[test]]
+name = "host_setup"
+path = "tests/host_setup.rs"
+
+[dev-dependencies]
+toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
