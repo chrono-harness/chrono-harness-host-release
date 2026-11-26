@@ -18,6 +18,11 @@ use vstd::vpanic as panic;
 use vstd::string::StringSliceAdditionalSpecFns;
 
 #[cfg(verus_keep_ghost)]
+mod originals;
+#[cfg(verus_keep_ghost)]
+mod query_tool;
+
+#[cfg(verus_keep_ghost)]
 #[path = "proof_support/host-release/publication.rs"]
 mod publication_fixture;
 
