@@ -365,6 +365,29 @@ fn run_command_requires_one_complete_argument(command: String, other: String, fi
 }
 
 #[cfg(verus_keep_ghost)]
+fn installer_receives_the_complete_page_result(error: String) {
+    let more = command::release_page_output(Ok(true));
+    let last = command::release_page_output(Ok(false));
+    let failed = command::release_page_output(Err(error));
+    assert(more is Ok && more.unwrap()@ == "next"@);
+    assert(last is Ok && last.unwrap()@ == "done"@);
+    assert(failed is Err && failed.unwrap_err()@ == error@);
+}
+
+#[cfg(verus_keep_ghost)]
+fn installer_forwards_only_its_page_headers(args: &[String])
+{
+    let actual = command::release_page_headers(args);
+    if args.len() != 3 {
+        assert(actual.is_none());
+    } else if args[0]@ == "resolve-install-v1"@ && args[1]@ == "--page-state"@ {
+        assert(actual.is_some() && actual.unwrap()@ == args[2]@);
+    } else {
+        assert(actual.is_none());
+    }
+}
+
+#[cfg(verus_keep_ghost)]
 fn decoder_only_relabels_the_reported_duplicate(key: &str, at: &str) {
     use policy::codec::duplicate_member;
     proof {
