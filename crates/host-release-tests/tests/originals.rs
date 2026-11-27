@@ -558,3 +558,72 @@ fn wire_hex_roundtrips(digest: &[u8; 32], index: usize)
     assert(high as int * 16 + low as int == digest@[index as int] as int);
 }
 }
+
+#[test]
+fn template_landing_binds_both_jobs_to_the_wrapper_attempt_and_the_selected_sha() {
+    use chrono_host_release::template_run::{check, promotion};
+    use serde_json::{Value, json};
+    let repository = "chrono-harness/chrono-harness-copier";
+    let selected = "9798705dd5eb436307b5c84b56e9b086fdfedc3d";
+    let wrapper = "bacdf785fd25dfa9f619a85dbd77159e29e5003c";
+    let run = json!({"id":45916682140_u64,"run_attempt":1,"run_number":15,"event":"workflow_dispatch",
+        "repository":{"full_name":repository},"head_repository":{"full_name":repository},
+        "path":".github/workflows/copier.yml","head_branch":"dev","head_sha":wrapper,
+        "status":"completed","conclusion":"success","display_title":"CodeQL 45895050659/1"});
+    let job = |name: &str, step: &str| {
+        json!({"run_id":45916682140_u64,"run_attempt":1,
+        "head_sha":wrapper,"name":name,"status":"completed","conclusion":"success",
+        "steps":[{"name":step,"conclusion":"success"}]})
+    };
+    let landing = json!({"id":45916682140_u64,"attempt":1,"event":"workflow_dispatch",
+        "codeql_run":45895050659_u64,"codeql_attempt":1,
+        "jobs":[job("Select landed dependency", "Select the landed commit"),
+                job(&format!("Check landed {selected}"), "Check the landed commit")]});
+    let query = json!({"repository":repository,"workflow":"copier.yml","branch":"dev","sha":selected,
+        "run":run,"landing":landing});
+    let verify = |q: &Value| check(serde_json::to_vec(q).unwrap().as_slice());
+    verify(&query).unwrap();
+    let mut native = query.clone();
+    native["run"]["event"] = json!("workflow_run");
+    native["landing"]["event"] = json!("workflow_run");
+    verify(&native).unwrap();
+    for (pointer, value) in [
+        ("/branch", json!("main")),
+        ("/sha", json!(wrapper)),
+        ("/run/event", json!("pull_request")),
+        ("/run/head_repository/full_name", json!("elsewhere/fork")),
+        ("/run/path", json!(".github/workflows/other.yml")),
+        ("/run/display_title", json!("CodeQL 45895050659/2")),
+        ("/landing/id", json!(10)),
+        ("/landing/jobs/0/conclusion", json!("skipped")),
+        ("/landing/jobs/1/run_attempt", json!(2)),
+        ("/landing/jobs/1/head_sha", json!(selected)),
+        ("/landing/jobs/1/run_id", json!(10)),
+        ("/landing/jobs/1/steps/0/conclusion", json!("skipped")),
+    ] {
+        let mut wrong = query.clone();
+        *wrong.pointer_mut(pointer).unwrap() = value;
+        assert!(verify(&wrong).is_err(), "{pointer}");
+    }
+    let mut duplicate = query.clone();
+    duplicate["landing"]["jobs"]
+        .as_array_mut()
+        .unwrap()
+        .push(landing["jobs"][1].clone());
+    assert!(verify(&duplicate).is_err());
+    let stable = json!({"kind":"adopted","selected":selected,"tag":"v0.1.0-alpha.15","version":"0.1.0",
+        "repository":repository,"workflow":"copier.yml","origin":run,"landing":landing,
+        "development":{"status":"ahead"},"main":{"status":"ahead"}});
+    let promote = |q: &Value| promotion(serde_json::to_vec(q).unwrap().as_slice());
+    promote(&stable).unwrap();
+    for (pointer, value) in [
+        ("/tag", json!("v0.1.0-alpha.16")),
+        ("/selected", json!(wrapper)),
+        ("/development/status", json!("diverged")),
+        ("/main/status", json!("behind")),
+    ] {
+        let mut wrong = stable.clone();
+        *wrong.pointer_mut(pointer).unwrap() = value;
+        assert!(promote(&wrong).is_err(), "{pointer}");
+    }
+}

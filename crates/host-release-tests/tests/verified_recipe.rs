@@ -46,6 +46,26 @@ mod staging_fixture;
 mod tool_fixture;
 
 verus! {
+
+#[cfg(verus_keep_ghost)]
+fn landing_requires_both_real_attempts_and_the_development_branch(run: u64, a: u64, upstream: u64, b: u64)
+    requires run > 0, a > 0, upstream > 0, b > 0,
+{
+    use policy::template_run::landing_event;
+    proof { reveal_strlit("dev"); reveal_strlit("main"); reveal_strlit("workflow_run");
+        reveal_strlit("workflow_dispatch"); reveal_strlit("pull_request");
+        assert("dev"@.len() != "main"@.len());
+        assert("workflow_run"@[0] != "pull_request"@[0]);
+        assert("workflow_dispatch"@.len() != "pull_request"@.len());
+    }
+    expect_recipe(landing_event("dev", "workflow_run", run, a, upstream, b));
+    expect_recipe(landing_event("dev", "workflow_dispatch", run, a, upstream, b));
+    expect_recipe(!landing_event("main", "workflow_run", run, a, upstream, b));
+    expect_recipe(!landing_event("dev", "pull_request", run, a, upstream, b));
+    expect_recipe(!landing_event("dev", "workflow_run", run, 0, upstream, b));
+    expect_recipe(!landing_event("dev", "workflow_run", run, a, upstream, 0));
+}
+
 #[cfg(verus_keep_ghost)]
 fn registration_keeps_only_the_applicable_stream(stdout: Vec<u8>, diagnostic: Vec<u8>, code: i32)
     requires code != 0, diagnostic.len() > 0,

@@ -44,6 +44,10 @@ pub mod native_delivery;
 #[path = "publication.rs"]
 pub mod publication;
 
+#[cfg(verus_keep_ghost)]
+#[path = "template_run.rs"]
+pub mod template_run;
+
 #[path = "version_order.rs"]
 pub mod version_order;
 

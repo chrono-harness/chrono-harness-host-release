@@ -1,9 +1,33 @@
 //! Read the selected GitHub run and its expected identity from the publisher.
+#[cfg(verus_keep_ghost)]
+use super::same_text;
+#[cfg(not(verus_keep_ghost))]
+use crate::verified_recipe::same_text;
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+pub fn landing_event(branch: &str, event: &str, run: u64, attempt: u64, upstream: u64, upstream_attempt: u64) -> (ok: bool)
+    ensures ok == (branch@ == "dev"@ && (event@ == "workflow_run"@ || event@ == "workflow_dispatch"@)
+        && run > 0 && attempt > 0 && upstream > 0 && upstream_attempt > 0),
+{
+    same_text(branch, "dev") && (same_text(event, "workflow_run") || same_text(event, "workflow_dispatch"))
+        && run > 0 && attempt > 0 && upstream > 0 && upstream_attempt > 0
+}
+}
+
+#[cfg(not(verus_keep_ghost))]
 use crate::verified_recipe::delivery::{acceptance_declared, acceptance_job, landed_push};
+#[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
+#[cfg(not(verus_keep_ghost))]
 use serde_json::Value;
+#[cfg(not(verus_keep_ghost))]
 use std::io::Read;
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Request {
@@ -12,8 +36,10 @@ struct Request {
     branch: String,
     sha: String,
     run: Value,
+    landing: Option<Landing>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Acceptance {
@@ -23,12 +49,95 @@ struct Acceptance {
     jobs: Vec<Value>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn read<T: serde::de::DeserializeOwned>(mut input: impl Read) -> Result<T, String> {
     let mut bytes = Vec::new();
     input.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
     serde_json::from_value(crate::codec::json(&bytes)?).map_err(|e| e.to_string())
 }
 
+#[cfg(not(verus_keep_ghost))]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Landing {
+    id: u64,
+    attempt: u64,
+    event: String,
+    codeql_run: u64,
+    codeql_attempt: u64,
+    jobs: Vec<Value>,
+}
+
+#[cfg(not(verus_keep_ghost))]
+impl Landing {
+    fn verify(
+        &self,
+        run: &Value,
+        repository: &str,
+        workflow: &str,
+        branch: &str,
+        selected: &str,
+    ) -> Result<(), String> {
+        use crate::verified_recipe::delivery::{number_fields, text_fields, valid_release_oid};
+        let wrapper = run["head_sha"].as_str().ok_or("missing wrapper SHA")?;
+        let title = format!("CodeQL {}/{}", self.codeql_run, self.codeql_attempt);
+        let path = format!(".github/workflows/{workflow}");
+        if !landing_event(
+            branch,
+            &self.event,
+            self.id,
+            self.attempt,
+            self.codeql_run,
+            self.codeql_attempt,
+        ) || !valid_release_oid(wrapper.as_bytes())
+            || !valid_release_oid(selected.as_bytes())
+            || !number_fields(&[
+                (run["id"].as_u64(), self.id),
+                (run["run_attempt"].as_u64(), self.attempt),
+            ])
+            || !text_fields(&[
+                (run["repository"]["full_name"].as_str(), repository),
+                (run["head_repository"]["full_name"].as_str(), repository),
+                (run["path"].as_str(), &path),
+                (run["head_branch"].as_str(), branch),
+                (run["display_title"].as_str(), &title),
+                (run["event"].as_str(), &self.event),
+                (run["status"].as_str(), "completed"),
+                (run["conclusion"].as_str(), "success"),
+            ])
+        {
+            return Err("different or incomplete dependency landing run".into());
+        }
+        let check = format!("Check landed {selected}");
+        for (name, step) in [
+            ("Select landed dependency", "Select the landed commit"),
+            (check.as_str(), "Check the landed commit"),
+        ] {
+            let mut rows = self
+                .jobs
+                .iter()
+                .filter(|job| job["name"].as_str() == Some(name));
+            let job = rows
+                .next()
+                .ok_or_else(|| format!("missing landing job {name}"))?;
+            if rows.next().is_some()
+                || job["status"] != "completed"
+                || !number_fields(&[
+                    (job["run_id"].as_u64(), self.id),
+                    (job["run_attempt"].as_u64(), self.attempt),
+                ])
+                || !exercised_job(job, name, wrapper, step)
+            {
+                return Err(format!(
+                    "ambiguous or unsuccessful landing job {name} in selected attempt"
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(verus_keep_ghost))]
 pub fn check(input: impl Read) -> Result<(), String> {
     let request: Request = read(input)?;
     verify_check(
@@ -37,16 +146,22 @@ pub fn check(input: impl Read) -> Result<(), String> {
         &request.workflow,
         &request.branch,
         &request.sha,
+        request.landing.as_ref(),
     )
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn verify_check(
     run: &Value,
     repository: &str,
     workflow: &str,
     branch: &str,
     sha: &str,
+    landing: Option<&Landing>,
 ) -> Result<(), String> {
+    if let Some(binding) = landing {
+        return binding.verify(run, repository, workflow, branch, sha);
+    }
     let fields = [
         run["repository"]["full_name"].as_str(),
         run["head_repository"]["full_name"].as_str(),
@@ -68,10 +183,31 @@ fn verify_check(
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn row_names(rows: &[Value]) -> Vec<Option<&str>> {
     rows.iter().map(|row| row["name"].as_str()).collect()
 }
 
+#[cfg(not(verus_keep_ghost))]
+fn exercised_job(job: &Value, name: &str, sha: &str, step: &str) -> bool {
+    let steps: Vec<_> = job["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|step| (step["name"].as_str(), step["conclusion"].as_str()))
+        .collect();
+    acceptance_job(
+        job["name"].as_str(),
+        name,
+        job["conclusion"].as_str(),
+        job["head_sha"].as_str(),
+        sha,
+        &steps,
+        step,
+    )
+}
+
+#[cfg(not(verus_keep_ghost))]
 pub fn acceptance(input: impl Read) -> Result<(), String> {
     let request: Acceptance = read(input)?;
     if !acceptance_declared(request.required_jobs.len(), &request.step) {
@@ -82,27 +218,14 @@ pub fn acceptance(input: impl Read) -> Result<(), String> {
         let index = crate::verified_recipe::delivery::last_job_named(&names, name)
             .ok_or_else(|| format!("missing successful consumer on {name}"))?;
         let job = &request.jobs[index];
-        let steps: Vec<_> = job["steps"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|step| (step["name"].as_str(), step["conclusion"].as_str()))
-            .collect();
-        if !acceptance_job(
-            job["name"].as_str(),
-            name,
-            job["conclusion"].as_str(),
-            job["head_sha"].as_str(),
-            &request.sha,
-            &steps,
-            &request.step,
-        ) {
+        if !exercised_job(job, name, &request.sha, &request.step) {
             return Err(format!("missing exercised product on {name}"));
         }
     }
     Ok(())
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct VersionPlan {
@@ -110,6 +233,7 @@ struct VersionPlan {
     latest: Option<String>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn components(core: &str) -> Result<[&[u8]; 3], String> {
     let parts: Vec<_> = core.split('.').collect();
     if !crate::verified_recipe::delivery::version_numbers(&parts) {
@@ -122,6 +246,7 @@ fn components(core: &str) -> Result<[&[u8]; 3], String> {
     ])
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn next_version(input: impl Read) -> Result<String, String> {
     use crate::verified_recipe::version_order;
     let request: VersionPlan = read(input)?;
@@ -139,6 +264,7 @@ pub fn next_version(input: impl Read) -> Result<String, String> {
     Ok(format!("{prefix}.{patch}"))
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Release {
@@ -149,6 +275,7 @@ struct Release {
     release: Value,
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn release(input: impl Read) -> Result<(), String> {
     use crate::verified_recipe::delivery::{boolean_fields, release_assets, text_fields};
     let request: Release = read(input)?;
@@ -186,6 +313,7 @@ pub fn release(input: impl Read) -> Result<(), String> {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 struct ReleaseRow {
     tag_name: String,
@@ -194,6 +322,7 @@ struct ReleaseRow {
     published_at: Option<String>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn latest_stable(input: impl Read) -> Result<Option<String>, String> {
     use crate::verified_recipe::version_order;
     let rows: Vec<ReleaseRow> = read(input)?;
@@ -218,6 +347,7 @@ pub fn latest_stable(input: impl Read) -> Result<Option<String>, String> {
     Ok(version_order::latest_stable(&keys).map(|index| rows[index].tag_name.clone()))
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InstallAssets {
@@ -227,6 +357,7 @@ struct InstallAssets {
     macos: String,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InstallRequest {
@@ -236,6 +367,7 @@ struct InstallRequest {
     releases: Vec<Value>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 /// Core numbers reuse the release planner's unbounded decimal ordering. The
 /// SemVer library validates and compares prerelease identifiers and metadata.
 struct InstallVersion<'a> {
@@ -243,6 +375,7 @@ struct InstallVersion<'a> {
     pre: semver::Prerelease,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl<'a> InstallVersion<'a> {
     fn from_tag(tag: &'a str) -> Option<Self> {
         let version = tag.strip_prefix('v')?;
@@ -279,6 +412,7 @@ impl<'a> InstallVersion<'a> {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn install_release<'a>(selector: &str, releases: &'a [Value]) -> Result<&'a Value, String> {
     use crate::verified_recipe::{roadmap::published, version_order::install_channel};
     let preview = match selector {
@@ -332,12 +466,14 @@ fn install_release<'a>(selector: &str, releases: &'a [Value]) -> Result<&'a Valu
         .ok_or_else(|| format!("no published {selector} release"))
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Serialize)]
 struct InstallAsset<'a> {
     url: &'a str,
     checksum: &'a str,
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn install_asset<'a>(
     repository: &str,
     tag: &str,
@@ -369,6 +505,7 @@ fn install_asset<'a>(
     Ok(InstallAsset { url, checksum })
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Serialize)]
 struct InstallPlatforms<'a> {
     #[serde(rename = "linux-x64")]
@@ -377,6 +514,7 @@ struct InstallPlatforms<'a> {
     macos: InstallAsset<'a>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Serialize)]
 struct SelectedInstall<'a> {
     tag: &'a str,
@@ -384,6 +522,7 @@ struct SelectedInstall<'a> {
     platforms: InstallPlatforms<'a>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn resolve_request(request: &InstallRequest) -> Result<SelectedInstall<'_>, String> {
     let row = install_release(&request.selector, &request.releases)?;
     let tag = row["tag_name"].as_str().ok_or("missing release tag")?;
@@ -412,11 +551,13 @@ fn resolve_request(request: &InstallRequest) -> Result<SelectedInstall<'_>, Stri
     })
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn resolve_install(input: impl Read) -> Result<Value, String> {
     let request: InstallRequest = read(input)?;
     serde_json::to_value(resolve_request(&request)?).map_err(|e| e.to_string())
 }
 
+#[cfg(not(verus_keep_ghost))]
 /// Read curl's final response block. GitHub's release endpoint uses Link
 /// entries of the form <url>; rel="next", with comma-separated entries.
 pub fn release_page_state(headers: &str) -> Result<bool, String> {
@@ -482,6 +623,7 @@ pub fn release_page_state(headers: &str) -> Result<bool, String> {
     ))
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn resolve_mise_tool(
     command: &str,
     repository: &str,
@@ -532,6 +674,7 @@ pub fn resolve_mise_tool(
     Ok(toml)
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum Promotion {
@@ -566,11 +709,13 @@ enum Promotion {
         repository: String,
         workflow: String,
         origin: Value,
+        landing: Option<Landing>,
         development: Value,
         main: Value,
     },
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn promotion(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery as policy;
     match read(input)? {
@@ -648,10 +793,18 @@ pub fn promotion(input: impl Read) -> Result<Value, String> {
             repository,
             workflow,
             origin,
+            landing,
             development,
             main,
         } => {
-            verify_check(&origin, &repository, &workflow, "dev", &selected)?;
+            verify_check(
+                &origin,
+                &repository,
+                &workflow,
+                "dev",
+                &selected,
+                landing.as_ref(),
+            )?;
             let (core, serial) = tag
                 .strip_prefix('v')
                 .and_then(|s| s.split_once("-alpha."))
@@ -676,6 +829,7 @@ pub fn promotion(input: impl Read) -> Result<Value, String> {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum ConsumerPin {
@@ -693,6 +847,7 @@ enum ConsumerPin {
     },
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn check_pin_version(value: &str, planned: &str, rolling: bool) -> Result<(), String> {
     let (core, serial) = match value.split_once("-alpha.") {
         Some((core, serial)) => (core, Some(serial)),
@@ -706,6 +861,7 @@ fn check_pin_version(value: &str, planned: &str, rolling: bool) -> Result<(), St
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn consumer_pin(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery::{installed_download, text_fields};
     match read(input)? {
@@ -769,6 +925,7 @@ pub fn consumer_pin(input: impl Read) -> Result<Value, String> {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OriginRequest {
@@ -786,6 +943,7 @@ struct OriginRequest {
     linux: PlatformOrigin,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PlatformOrigin {
@@ -800,6 +958,7 @@ struct PlatformOrigin {
     artifact: Value,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl OriginRequest {
     fn platform(&self, platform: &str, row: &PlatformOrigin) -> Result<(String, Value), String> {
         use crate::verified_recipe::delivery::{
@@ -908,6 +1067,7 @@ impl OriginRequest {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn binary_origins(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery::{number_fields, positive};
     let request: OriginRequest = read(input)?;
@@ -917,6 +1077,7 @@ pub fn binary_origins(input: impl Read) -> Result<Value, String> {
         &request.workflow,
         "dev",
         &request.source,
+        None,
     )?;
     if !positive(Some(request.check_id))
         || !positive(Some(request.check_attempt))
@@ -937,6 +1098,7 @@ pub fn binary_origins(input: impl Read) -> Result<Value, String> {
         "check":{"run":request.check_id,"attempt":request.check_attempt},"builds":builds}))
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum Publication {
@@ -973,6 +1135,7 @@ enum Publication {
     },
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn ref_status(reference: &Value, name: &str, source: &str) -> u8 {
     crate::verified_recipe::delivery::selected_ref(
         !reference.is_null(),
@@ -984,6 +1147,7 @@ fn ref_status(reference: &Value, name: &str, source: &str) -> u8 {
     )
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl crate::verified_recipe::delivery::PendingAssets
     for std::collections::BTreeMap<String, String>
 {
@@ -992,6 +1156,7 @@ impl crate::verified_recipe::delivery::PendingAssets
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn publication(input: impl Read) -> Result<Value, String> {
     use crate::verified_recipe::delivery as policy;
     use serde_json::json;
