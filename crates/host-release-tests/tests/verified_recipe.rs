@@ -61,9 +61,9 @@ fn archive_end_preserves_the_error_or_reports_the_member<T, E>(member: T, failur
     let complete = policy::transport::archive_finished::<T, E>(None);
     let extra = policy::transport::archive_finished::<T, E>(Some(Ok(member)));
     let broken = policy::transport::archive_finished::<T, E>(Some(Err(failure)));
-    assert(complete == Ok(true));
-    assert(extra == Ok(false));
-    assert(broken == Err(failure));
+    assert(complete == Result::<bool, E>::Ok(true));
+    assert(extra == Result::<bool, E>::Ok(false));
+    assert(broken == Result::<bool, E>::Err(failure));
 }
 
 
