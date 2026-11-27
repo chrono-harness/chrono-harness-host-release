@@ -49,7 +49,7 @@ verus! {
 #[cfg(verus_keep_ghost)]
 fn local_parent_failure_precedes_the_final_directory() {
     let result = policy::local::claim_output(
-        || -> (s: Result<(), u8>) ensures s == Err::<(), u8>(9) { Err(9) },
+        Err::<(),u8>(9),
         || -> (s: Result<(), u8>) requires false { Ok(()) },
     );
     assert(result == Err::<(), u8>(9));
@@ -58,7 +58,7 @@ fn local_parent_failure_precedes_the_final_directory() {
 #[cfg(verus_keep_ghost)]
 fn local_output_keeps_the_exclusive_directory_result<E>(leaf: Result<(), E>) {
     let result = policy::local::claim_output(
-        || -> (s: Result<(), E>) ensures s == Ok::<(), E>(()) { Ok(()) },
+        Ok::<(),E>(()),
         || -> (s: Result<(), E>) ensures s == leaf { leaf },
     );
     assert(result == leaf);

@@ -6,16 +6,15 @@ use vstd::prelude::*;
 
 verus! {
 /// Parent directory errors stop creation. Only the exclusive final creation grants the output.
-pub fn claim_output<E, P, F>(parents: P, final_directory: F) -> (result: Result<(), E>)
-    where P: FnOnce() -> Result<(), E>, F: FnOnce() -> Result<(), E>,
-    requires parents.requires(()),
-        parents.ensures((), Ok::<(), E>(())) ==> final_directory.requires(()),
-    ensures exists|p: Result<(), E>| #[trigger] parents.ensures((), p) && match p {
+pub fn claim_output<E, F>(parents: Result<(), E>, final_directory: F) -> (result: Result<(), E>)
+    where F: FnOnce() -> Result<(), E>,
+    requires parents.is_ok() ==> final_directory.requires(()),
+    ensures match parents {
         Err(error) => result == Err::<(), E>(error),
         Ok(()) => final_directory.ensures((), result),
     },
 {
-    match parents() {
+    match parents {
         Ok(()) => final_directory(),
         Err(error) => Err(error),
     }
@@ -381,15 +380,12 @@ pub fn create_output(output: &Path) -> Result<(), String> {
     let parent = output
         .parent()
         .ok_or_else(|| error("missing release output parent"))?;
-    claim_output(
-        || fs::create_dir_all(parent).map_err(error),
-        || {
-            fs::create_dir(output).map_err(|failure| match failure.kind() {
-                std::io::ErrorKind::AlreadyExists => error("release output already exists"),
-                _ => error(failure),
-            })
-        },
-    )
+    claim_output(fs::create_dir_all(parent).map_err(error), || {
+        fs::create_dir(output).map_err(|failure| match failure.kind() {
+            std::io::ErrorKind::AlreadyExists => error("release output already exists"),
+            _ => error(failure),
+        })
+    })
 }
 
 #[cfg(not(verus_keep_ghost))]
