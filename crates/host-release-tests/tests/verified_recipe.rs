@@ -47,6 +47,24 @@ mod tool_fixture;
 
 verus! {
 #[cfg(verus_keep_ghost)]
+fn local_parent_failure_precedes_the_final_directory() {
+    let result = policy::local::claim_output(
+        || -> (s: Result<(), u8>) ensures s == Err::<(), u8>(9) { Err(9) },
+        || -> (s: Result<(), u8>) requires false { Ok(()) },
+    );
+    assert(result == Err::<(), u8>(9));
+}
+
+#[cfg(verus_keep_ghost)]
+fn local_output_keeps_the_exclusive_directory_result<E>(leaf: Result<(), E>) {
+    let result = policy::local::claim_output(
+        || -> (s: Result<(), E>) ensures s == Ok::<(), E>(()) { Ok(()) },
+        || -> (s: Result<(), E>) ensures s == leaf { leaf },
+    );
+    assert(result == leaf);
+}
+
+#[cfg(verus_keep_ghost)]
 fn only_git_regular_files_are_admitted(line: &[u8]) {
     let accepted = policy::committed::regular_blob_mode(line);
     let plain = [49u8, 48u8, 48u8, 54u8, 52u8, 52u8, 10u8];
