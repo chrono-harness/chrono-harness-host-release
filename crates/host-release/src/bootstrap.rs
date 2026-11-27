@@ -1,9 +1,54 @@
 //! Release consumes the original build producer's public report protocol.
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+
+pub enum ReportReply {
+    Decode(Vec<u8>),
+    ObservationFailure(String),
+    Unsuccessful(i32, Vec<u8>),
+    Incomplete,
+}
+
+pub fn report_reply(
+    failure: Option<String>, code: i32, stdout: Vec<u8>, stderr: Vec<u8>,
+    stdout_complete: bool, stderr_complete: bool,
+) -> (reply: ReportReply)
+    ensures match reply {
+        ReportReply::ObservationFailure(message) => failure == Some(message),
+        ReportReply::Unsuccessful(status, bytes) =>
+            failure is None && code != 0 && status == code && bytes == stderr,
+        ReportReply::Incomplete =>
+            failure is None && code == 0 && (!stdout_complete || !stderr_complete),
+        ReportReply::Decode(bytes) =>
+            failure is None && code == 0 && stdout_complete && stderr_complete && bytes == stdout,
+    },
+{
+    if let Some(message) = failure {
+        ReportReply::ObservationFailure(message)
+    } else if code != 0 {
+        ReportReply::Unsuccessful(code, stderr)
+    } else if !stdout_complete || !stderr_complete {
+        ReportReply::Incomplete
+    } else {
+        ReportReply::Decode(stdout)
+    }
+}
+}
+
+#[cfg(not(verus_keep_ghost))]
 use crate::execution::Environment;
+#[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+#[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
+#[cfg(not(verus_keep_ghost))]
 use std::{collections::BTreeMap, ffi::OsStr, path::Path};
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SourceObservation {
@@ -13,6 +58,7 @@ pub struct SourceObservation {
     pub error: Option<String>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativePlatform {
@@ -20,6 +66,7 @@ pub struct NativePlatform {
     pub machine: String,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Checkout {
@@ -29,6 +76,7 @@ pub struct Checkout {
     pub summary: Summary,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Installation {
@@ -36,6 +84,7 @@ pub struct Installation {
     pub sha256: String,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Summary {
@@ -44,6 +93,7 @@ pub struct Summary {
     pub streams: Vec<Value>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn query<T: DeserializeOwned>(
     root: &Path,
     environment: &Environment,
@@ -93,19 +143,25 @@ pub fn query<T: DeserializeOwned>(
             stderr: &mut std::io::sink(),
         },
     )?;
-    if let Some(e) = result.failure {
-        return Err(e);
+    match report_reply(
+        result.failure,
+        result.exit_code,
+        result.stdout_bytes,
+        result.stderr_bytes,
+        result.stdout_complete,
+        result.stderr_complete,
+    ) {
+        ReportReply::Decode(bytes) => crate::codec::decode(&bytes),
+        ReportReply::ObservationFailure(message) => Err(message),
+        ReportReply::Unsuccessful(status, stderr) => Err(format!(
+            "bootstrap original report exited {status}: {}",
+            String::from_utf8_lossy(&stderr).trim_end()
+        )),
+        ReportReply::Incomplete => Err("incomplete bootstrap original report".into()),
     }
-    if result.exit_code != 0 {
-        return Err(format!(
-            "bootstrap original report exited {}: {}",
-            result.exit_code,
-            String::from_utf8_lossy(&result.stderr_bytes).trim_end()
-        ));
-    }
-    crate::codec::decode(&result.stdout_bytes)
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn native_platform(timeout_seconds: u64) -> Result<NativePlatform, String> {
     query(
         &std::env::current_dir().map_err(|e| e.to_string())?,
