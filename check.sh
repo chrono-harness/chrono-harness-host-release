@@ -54,17 +54,17 @@ src=crates/host-release/src
 tests=crates/host-release-tests/tests
 included="$tests/../../host-release/src"
 
-chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe.rlib "$src/verified_recipe.rs" "$src/committed.rs" "$src/transport.rs" "$src/bootstrap.rs" "$src/codec.rs" "$src/main.rs" \
+chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe.rlib "$src/verified_recipe.rs" "$src/bootstrap.rs" "$src/codec.rs" "$src/main.rs" "$src/committed.rs" \
   "$src/evidence.rs" "$src/execution.rs" "$src/files.rs" "$src/frontend.rs" \
   "$src/receipt.rs" "$src/recipe.rs" \
-  "$src/preview.rs" "$src/registrations.rs" "$src/staging.rs" \
+  "$src/preview.rs" "$src/registrations.rs" "$src/staging.rs" "$src/transport.rs" \
   "$src/delivery.rs" "$src/publication.rs" \
   "$src/observed.rs" "$src/process.rs" "$src/template_run.rs" "$src/version_order.rs" "$src/roadmap.rs" "$src/verified_delivery.rs" "$src/identity.rs"
-chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe-tests.rlib "$tests/verified_recipe.rs" "$included/verified_recipe.rs" "$included/committed.rs" "$included/transport.rs" "$included/bootstrap.rs" "$included/codec.rs" \
-  "$included/main.rs" "$included/evidence.rs" "$included/execution.rs" \
+chrono-host-bootstrap check-compiler-sources proof .chrono-harness/state/release-proofs/verify.release-recipe-tests.rlib "$tests/verified_recipe.rs" "$included/verified_recipe.rs" "$included/bootstrap.rs" "$included/codec.rs" \
+  "$included/main.rs" "$included/committed.rs" "$included/evidence.rs" "$included/execution.rs" \
   "$included/files.rs" "$included/frontend.rs" "$included/receipt.rs" \
   "$included/recipe.rs" "$included/preview.rs" "$included/registrations.rs" \
-  "$included/staging.rs" "$included/delivery.rs" \
+  "$included/staging.rs" "$included/transport.rs" "$included/delivery.rs" \
   "$included/publication.rs" "$included/observed.rs" "$included/process.rs" "$included/template_run.rs" "$included/version_order.rs" "$included/roadmap.rs" "$included/verified_delivery.rs" "$included/identity.rs" \
   "$tests/originals.rs" "$tests/query_tool.rs" \
   "$tests/proof_support/host-release/publication.rs" "$tests/proof_support/host-release/recipe.rs" \
