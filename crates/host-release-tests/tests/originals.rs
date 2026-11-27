@@ -70,6 +70,9 @@ fn bootstrap_report_rejects_changed_or_incomplete_process_evidence() {
     let env = mock(root, "chrono-host-bootstrap");
     let request = json!({"operation":"streams","report":"bound"});
     for (fault, expected) in [
+        ("stdout-incomplete", "incomplete bootstrap original report"),
+        ("stderr-incomplete", "incomplete bootstrap original report"),
+        ("observation-error", "bootstrap observation failed"),
         ("digest", "stream identity differs"),
         ("child", "process identity differs"),
         ("launcher", "process identity differs"),

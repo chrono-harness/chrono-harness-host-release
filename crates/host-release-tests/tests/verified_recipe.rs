@@ -46,6 +46,22 @@ mod staging_fixture;
 mod tool_fixture;
 
 verus! {
+
+#[cfg(verus_keep_ghost)]
+fn bootstrap_replies_keep_original_errors_and_only_decode_complete_output() {
+    use policy::bootstrap::{report_reply, ReportReply};
+    let success = report_reply(None, 0, vec![91u8, 93u8], vec![10u8], true, true);
+    assert(match success { ReportReply::Decode(bytes) => bytes@ == seq![91u8, 93u8], _ => false });
+    let stdout_missing = report_reply(None, 0, vec![91u8, 93u8], vec![], false, true);
+    assert(stdout_missing is Incomplete);
+    let stderr_missing = report_reply(None, 0, vec![91u8, 93u8], vec![], true, false);
+    assert(stderr_missing is Incomplete);
+    let child_error = report_reply(None, 17, vec![], vec![9u8], false, false);
+    assert(match child_error { ReportReply::Unsuccessful(n, bytes) => n == 17 && bytes@ == seq![9u8], _ => false });
+    let observer_error = report_reply(Some(String::new()), 17, vec![], vec![], false, false);
+    assert(match observer_error { ReportReply::ObservationFailure(msg) => msg@.len() == 0, _ => false });
+}
+
 #[cfg(verus_keep_ghost)]
 fn stream_boundaries_select_the_captured_stream(limit: usize, out: &str, err: &str)
     requires out@ != err@,

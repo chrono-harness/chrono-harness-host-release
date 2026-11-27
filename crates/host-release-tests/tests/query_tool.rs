@@ -59,6 +59,12 @@ fn main() -> ExitCode {
         };
         let mut receipt = json!({"argv":spec["args"],"cwd":env::current_dir().unwrap(),"launcher_pid":std::process::id(),"child_pid":78,"executable":spec["program"],"sha256":header["expected_sha256"],"environment_digest":"env","exit_signal":null,"exit_code":reply["exit"],"failure":null,"stdout_complete":true,"stderr_complete":true,"stdout_size":stdout.len(),"stderr_size":stderr.len(),"stdout_sha256":hash(stdout),"stderr_sha256":hash(stderr)});
         match reply["fault"].as_str() {
+            Some("stdout-incomplete") => receipt["stdout_complete"] = json!(false),
+            Some("stderr-incomplete") => receipt["stderr_complete"] = json!(false),
+            Some("observation-error") => {
+                receipt["stdout_complete"] = json!(false);
+                receipt["failure"] = json!("bootstrap observation failed");
+            }
             Some("digest") => receipt["stdout_sha256"] = json!("changed"),
             Some("child") => receipt["child_pid"] = json!(0),
             Some("launcher") => receipt["launcher_pid"] = json!(0),
