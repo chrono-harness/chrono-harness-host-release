@@ -11,9 +11,9 @@ pub fn regular_blob_mode(line: &[u8]) -> (accepted: bool)
                       || line@ == seq![49u8, 48, 48, 55, 53, 53, 10]),
 {
     let accepted = line.len() == 7
-        && line[0] == b'1' && line[1] == b'0' && line[2] == b'0' && line[6] == b'\n'
-        && ((line[3] == b'6' && line[4] == b'4' && line[5] == b'4')
-         || (line[3] == b'7' && line[4] == b'5' && line[5] == b'5'));
+        && line[0] == 49u8 && line[1] == 48u8 && line[2] == 48u8 && line[6] == 10u8
+        && ((line[3] == 54u8 && line[4] == 52u8 && line[5] == 52u8)
+         || (line[3] == 55u8 && line[4] == 53u8 && line[5] == 53u8));
     proof {
         assert((line@ == seq![49u8, 48, 48, 54, 52, 52, 10])
             == (line@ =~= seq![49u8, 48, 48, 54, 52, 52, 10]));
