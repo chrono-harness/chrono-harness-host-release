@@ -1,11 +1,39 @@
 //! Read release recipes and workflow inputs from the exact previous release tree.
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+/// Git returns exactly one LF-terminated mode for a regular tree entry.
+pub fn regular_blob_mode(line: &[u8]) -> (accepted: bool)
+    ensures accepted == (line@ == seq![49u8, 48, 48, 54, 52, 52, 10]
+                      || line@ == seq![49u8, 48, 48, 55, 53, 53, 10]),
+{
+    let accepted = line.len() == 7
+        && line[0] == 49u8 && line[1] == 48u8 && line[2] == 48u8 && line[6] == 10u8
+        && ((line[3] == 54u8 && line[4] == 52u8 && line[5] == 52u8)
+         || (line[3] == 55u8 && line[4] == 53u8 && line[5] == 53u8));
+    proof {
+        assert((line@ == seq![49u8, 48, 48, 54, 52, 52, 10])
+            == (line@ =~= seq![49u8, 48, 48, 54, 52, 52, 10]));
+        assert((line@ == seq![49u8, 48, 48, 55, 53, 53, 10])
+            == (line@ =~= seq![49u8, 48, 48, 55, 53, 53, 10]));
+    }
+    accepted
+}
+}
+
+#[cfg(not(verus_keep_ghost))]
 use crate::execution::Environment;
+#[cfg(not(verus_keep_ghost))]
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
     process::Command,
 };
 
+#[cfg(not(verus_keep_ghost))]
 pub struct Committed<'a> {
     root: &'a Path,
     env: &'a Environment,
@@ -13,6 +41,7 @@ pub struct Committed<'a> {
     tree: String,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl<'a> Committed<'a> {
     pub fn new(
         root: &'a Path,
@@ -93,7 +122,7 @@ impl<'a> Committed<'a> {
         // A tree path can name a symlink or submodule. Git formats just its
         // mode here, so path quoting and whitespace cannot change the verdict.
         let mode = self.run(&["ls-tree", "--format=%(objectmode)", treeish, "--", path])?;
-        if !matches!(mode.as_slice(), b"100644\n" | b"100755\n") {
+        if !regular_blob_mode(&mode) {
             return Err(format!(
                 "release input is not a regular file in the fixed tree: {path}"
             ));
