@@ -45,6 +45,12 @@ pub mod native_delivery;
 pub mod publication;
 
 #[cfg(verus_keep_ghost)]
+#[path = "observed.rs"]
+pub mod observed;
+#[cfg(verus_keep_ghost)]
+#[path = "process.rs"]
+pub mod process;
+#[cfg(verus_keep_ghost)]
 #[path = "template_run.rs"]
 pub mod template_run;
 

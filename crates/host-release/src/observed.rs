@@ -1,9 +1,51 @@
 //! Release-side client of the installed process owner.
+#[cfg(verus_keep_ghost)]
+use super::same_text;
+#[cfg(not(verus_keep_ghost))]
+use crate::verified_recipe::same_text;
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Frame { Stdout, Stderr, Terminal, OutputLimit, TerminalLimit, Unknown }
+
+pub fn frame(kind: u8, size: usize, stdout: usize, stderr: usize, limit: usize) -> (f: Frame)
+    ensures
+        (f is Stdout) == (kind == 79 && stdout as int + size as int <= limit as int),
+        (f is Stderr) == (kind == 69 && stderr as int + size as int <= limit as int),
+        (f is OutputLimit) == ((kind == 79 && stdout as int + size as int > limit as int)
+            || (kind == 69 && stderr as int + size as int > limit as int)),
+        (f is Terminal) == (kind == 84 && size <= 2097152),
+        (f is TerminalLimit) == (kind == 84 && size > 2097152),
+        (f is Unknown) == (kind != 79 && kind != 69 && kind != 84),
+{
+    match kind {
+        79 => if stdout <= limit && size <= limit - stdout { Frame::Stdout } else { Frame::OutputLimit },
+        69 => if stderr <= limit && size <= limit - stderr { Frame::Stderr } else { Frame::OutputLimit },
+        84 => if size <= 2 * 1024 * 1024 { Frame::Terminal } else { Frame::TerminalLimit },
+        _ => Frame::Unknown,
+    }
+}
+
+/// Check the original stream digests from the terminal after checking their lengths.
+pub fn stream_digests(stdout: &str, stderr: &str, expected_stdout: &str, expected_stderr: &str) -> (ok: bool)
+    ensures ok == (stdout@ == expected_stdout@ && stderr@ == expected_stderr@),
+{ same_text(stdout, expected_stdout) && same_text(stderr, expected_stderr) }
+
+}
+
+#[cfg(not(verus_keep_ghost))]
 use crate::{
     codec::decode,
     files::{resolve_program, sha256},
 };
+#[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
+#[cfg(not(verus_keep_ghost))]
 use std::{
     collections::BTreeMap,
     io::{Read, Write},
@@ -12,10 +54,13 @@ use std::{
     time::Duration,
 };
 
+#[cfg(not(verus_keep_ghost))]
 pub const DESCRIPTORS: &str = "CHRONO_PROCESS_FDS";
+#[cfg(not(verus_keep_ghost))]
 /// Upper bound of each original stream in the v1 command protocol.
 pub const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Serialize)]
 pub struct CommandSpec {
     pub program: String,
@@ -25,6 +70,7 @@ pub struct CommandSpec {
     pub output_limit_bytes: usize,
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Deserialize)]
 pub struct Observation {
     pub argv: Vec<String>,
@@ -49,11 +95,13 @@ pub struct Observation {
     pub stderr_bytes: Vec<u8>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub struct ProcessForward<'a> {
     pub stdout: &'a mut (dyn Write + Send),
     pub stderr: &'a mut (dyn Write + Send),
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn receive(
     mut input: impl Read,
     limit: usize,
@@ -68,14 +116,12 @@ fn receive(
             .map_err(|e| format!("truncated observed command: {e}"))?;
         let size = usize::try_from(u64::from_be_bytes(header[1..].try_into().unwrap()))
             .map_err(|_| "frame length overflow")?;
-        let (capture, live) = match header[0] {
-            b'O' => (&mut stdout, &mut forward.stdout),
-            b'E' => (&mut stderr, &mut forward.stderr),
-            b'T' => {
-                // The request header is limited to 1 MiB. The receipt adds the runner's observed identities.
-                if size > 2 * 1024 * 1024 {
-                    return Err("oversize observed terminal record".into());
-                }
+        let (capture, live) = match frame(header[0], size, stdout.len(), stderr.len(), limit) {
+            Frame::Stdout => (&mut stdout, &mut forward.stdout),
+            Frame::Stderr => (&mut stderr, &mut forward.stderr),
+            Frame::TerminalLimit => return Err("oversize observed terminal record".into()),
+            Frame::OutputLimit => return Err("observed output exceeds command limit".into()),
+            Frame::Terminal => {
                 let mut bytes = vec![0; size];
                 input.read_exact(&mut bytes).map_err(|e| e.to_string())?;
                 let mut observed: Observation = decode(&bytes)?;
@@ -85,8 +131,12 @@ fn receive(
                 }
                 if stdout.len() != observed.stdout_size
                     || stderr.len() != observed.stderr_size
-                    || sha256(&stdout) != observed.stdout_sha256
-                    || sha256(&stderr) != observed.stderr_sha256
+                    || !stream_digests(
+                        &sha256(&stdout),
+                        &sha256(&stderr),
+                        &observed.stdout_sha256,
+                        &observed.stderr_sha256,
+                    )
                 {
                     return Err("observed terminal stream identity differs".into());
                 }
@@ -94,11 +144,8 @@ fn receive(
                 observed.stderr_bytes = stderr;
                 return Ok(observed);
             }
-            _ => return Err("unknown observed command frame".into()),
+            Frame::Unknown => return Err("unknown observed command frame".into()),
         };
-        if size > limit.saturating_sub(capture.len()) {
-            return Err("observed output exceeds command limit".into());
-        }
         let from = capture.len();
         capture.resize(from + size, 0);
         input
@@ -110,6 +157,7 @@ fn receive(
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn run_process_observed(
     root: &Path,
     spec: &CommandSpec,
@@ -124,6 +172,7 @@ pub fn run_process_observed(
         Duration::from_secs(spec.timeout_seconds),
     )
 }
+#[cfg(not(verus_keep_ghost))]
 pub fn run_process_observed_for(
     root: &Path,
     spec: &CommandSpec,
@@ -143,6 +192,7 @@ pub fn run_process_observed_for(
         },
     )
 }
+#[cfg(not(verus_keep_ghost))]
 pub fn run_process_observed_forwarded_for(
     root: &Path,
     spec: &CommandSpec,
@@ -154,6 +204,7 @@ pub fn run_process_observed_forwarded_for(
     observe_with_search(root, spec, input, digest, timeout, None, forward)
 }
 
+#[cfg(not(verus_keep_ghost))]
 /// A caller with an explicit host tool environment can select the installed owner independently
 /// of PATH supplied to the business child.
 pub(crate) fn observe_with_search(

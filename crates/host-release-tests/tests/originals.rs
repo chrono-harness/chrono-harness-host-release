@@ -627,3 +627,38 @@ fn template_landing_binds_both_jobs_to_the_wrapper_attempt_and_the_selected_sha(
         assert!(promote(&wrong).is_err(), "{pointer}");
     }
 }
+
+#[test]
+fn incomplete_output_keeps_observed_bytes_and_prevents_a_successful_unit() {
+    use chrono_host_release::process::{CapturedProcess, CapturedStream};
+    let incomplete = CapturedStream {
+        bytes: vec![10],
+        path: None,
+        failures: vec![],
+        complete: false,
+    };
+    let receipt = incomplete.receipt();
+    assert_eq!(receipt["bytes"], json!([10]));
+    assert_eq!(receipt["status"], "incomplete");
+    assert!(receipt.get("path").is_none());
+    let child = CapturedProcess {
+        pid: 9,
+        argv: vec![],
+        cwd: ".".into(),
+        started_ns: 1,
+        finished_ns: Some(2),
+        duration_seconds: 0.0,
+        child_exit: Some(0),
+        stdout: incomplete,
+        stderr: CapturedStream {
+            bytes: vec![],
+            path: Some("stderr".into()),
+            failures: vec![],
+            complete: true,
+        },
+        failures: vec![],
+        observation: Value::Null,
+    };
+    assert!(!child.passed());
+    assert_eq!(child.exit_code(), 2);
+}
