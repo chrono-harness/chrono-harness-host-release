@@ -1,6 +1,36 @@
 //! 发布单元的实时原流。沿用现有描述符转交；辅助 IO 失败后仍排空两流、加入原进程。
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+
+/// Negative receipt exit codes encode signals; absent or invalid owner status is unknown.
+pub fn child_status(signal: Option<i32>, code: i32) -> (status: Option<i32>)
+    ensures status == match signal {
+        Some(s) => if 1 <= s <= 127 { Some((-s) as i32) } else { None },
+        None => if 0 <= code <= 255 { Some(code) } else { None },
+    }, status is Some ==> -127 <= status.unwrap() <= 255,
+{
+    match signal {
+        Some(s) if 1 <= s && s <= 127 => Some(-s),
+        None if 0 <= code && code <= 255 => Some(code),
+        _ => None,
+    }
+}
+
+pub fn stream_failed(complete: bool, failures: usize) -> (failed: bool)
+    ensures failed == (!complete || failures > 0),
+{ !complete || failures > 0 }
+
+}
+
+#[cfg(not(verus_keep_ghost))]
 use crate::verified_recipe as policy;
+#[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
+#[cfg(not(verus_keep_ghost))]
 use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
@@ -8,6 +38,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Debug)]
 pub struct CapturedStream {
     pub bytes: Vec<u8>,
@@ -16,6 +47,7 @@ pub struct CapturedStream {
     pub complete: bool,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl CapturedStream {
     /// 路径只引用实际写成的文件；保留失败时继续提供已观察的原字节。
     pub fn receipt(&self) -> Value {
@@ -37,6 +69,7 @@ impl CapturedStream {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 #[derive(Debug)]
 pub struct CapturedProcess {
     pub pid: u32,
@@ -53,11 +86,12 @@ pub struct CapturedProcess {
     pub observation: Value,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl CapturedProcess {
     pub fn auxiliary_failed(&self) -> bool {
         !self.failures.is_empty()
-            || !self.stdout.failures.is_empty()
-            || !self.stderr.failures.is_empty()
+            || stream_failed(self.stdout.complete, self.stdout.failures.len())
+            || stream_failed(self.stderr.complete, self.stderr.failures.len())
     }
 
     pub fn exit_code(&self) -> i32 {
@@ -80,6 +114,7 @@ impl CapturedProcess {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn timestamp() -> Result<u128, String> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -87,6 +122,7 @@ fn timestamp() -> Result<u128, String> {
         .map_err(|error| error.to_string())
 }
 
+#[cfg(not(verus_keep_ghost))]
 struct StreamWriter<W> {
     file: Option<std::fs::File>,
     relative: String,
@@ -94,6 +130,7 @@ struct StreamWriter<W> {
     failures: Vec<String>,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl<W: Write> StreamWriter<W> {
     fn new(output: &Path, relative: String, forward: W) -> Self {
         let mut failures = Vec::new();
@@ -133,6 +170,7 @@ impl<W: Write> StreamWriter<W> {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl<W: Write> Write for StreamWriter<W> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if let Some(file) = self.file.as_mut() {
@@ -155,6 +193,7 @@ impl<W: Write> Write for StreamWriter<W> {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 /// Reuse the runner's bounded process owner, deadline, inherited capabilities and stream readers.
 /// Output paths remain relative to the release output, which may lie outside the source clone.
 pub fn execute(
@@ -182,13 +221,7 @@ pub fn execute(
             stderr: &mut stderr,
         },
     )?;
-    let child_exit = if let Some(signal) = original.exit_signal {
-        Some(-signal)
-    } else if original.exit_code >= 0 {
-        Some(original.exit_code)
-    } else {
-        None
-    };
+    let child_exit = child_status(original.exit_signal, original.exit_code);
     let observation = json!({"launcher_pid":original.launcher_pid,"executable":original.executable,"sha256":original.sha256,"environment_digest":original.environment_digest,"exit_signal":original.exit_signal,"engine_exit_code":original.exit_code,"failure":original.failure,"timeout_ns":timeout.as_nanos(),"output_limit_bytes":spec.output_limit_bytes});
     let mut failures: Vec<String> = original.failure.into_iter().collect();
     if child_exit.is_none() {

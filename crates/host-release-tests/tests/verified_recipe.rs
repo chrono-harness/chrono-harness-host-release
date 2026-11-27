@@ -46,6 +46,47 @@ mod staging_fixture;
 mod tool_fixture;
 
 verus! {
+#[cfg(verus_keep_ghost)]
+fn stream_boundaries_select_the_captured_stream(limit: usize, out: &str, err: &str)
+    requires out@ != err@,
+{
+    use policy::observed::stream_digests;
+    expect_recipe(stream_digests(out, err, out, err));
+    expect_recipe(!stream_digests(out, err, err, out));
+    expect_recipe(!stream_digests(out, err, out, out));
+    use policy::observed::{frame, Frame};
+    let stdout = frame(79, limit, 0, limit, limit);
+    let stderr = frame(69, limit, limit, 0, limit);
+    let stdout_over = frame(79, 1, limit, 0, limit);
+    let stderr_over = frame(69, 1, 0, limit, limit);
+    let empty = frame(79, 0, limit, limit, limit);
+    let terminal = frame(84, 2097152, limit, limit, limit);
+    let too_large = frame(84, 2097153, 0, 0, limit);
+    let unknown = frame(1, 0, 0, 0, limit);
+    assert(stdout is Stdout && stderr is Stderr && empty is Stdout);
+    assert(stdout_over is OutputLimit && stderr_over is OutputLimit);
+    assert(terminal is Terminal && too_large is TerminalLimit && unknown is Unknown);
+}
+
+#[cfg(verus_keep_ghost)]
+fn release_unit_keeps_real_exit_and_requires_complete_streams(signal: i32, code: i32)
+    requires 1 <= signal <= 127, 0 <= code <= 255,
+{
+    use policy::process::{child_status, stream_failed};
+    let stopped = child_status(Some(signal), code);
+    let exited = child_status(None, code);
+    assert(stopped == Some((-signal) as i32) && exited == Some(code));
+    let no_signal = child_status(Some(0), 0);
+    let large_signal = child_status(Some(128), 0);
+    let no_exit = child_status(None, -1);
+    let large_exit = child_status(None, 256);
+    assert(no_signal.is_none() && large_signal.is_none() && no_exit.is_none() && large_exit.is_none());
+    expect_recipe(stream_failed(false, 0));
+    expect_recipe(stream_failed(true, 1));
+    expect_recipe(!stream_failed(true, 0));
+}
+
+
 
 #[cfg(verus_keep_ghost)]
 fn landing_requires_both_real_attempts_and_the_development_branch(run: u64, a: u64, upstream: u64, b: u64)
