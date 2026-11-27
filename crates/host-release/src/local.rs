@@ -1,11 +1,38 @@
 //! 本地发布驱动：固定 Git 源、独立检出、有限并发和原生阻塞完成通道。
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+/// Parent directory errors stop creation. Only the exclusive final creation grants the output.
+pub fn claim_output<E, F>(parents: Result<(), E>, final_directory: F) -> (result: Result<(), E>)
+    where F: FnOnce() -> Result<(), E>,
+    requires parents.is_ok() ==> final_directory.requires(()),
+    ensures match parents {
+        Err(error) => result == Err::<(), E>(error),
+        Ok(()) => final_directory.ensures((), result),
+    },
+{
+    match parents {
+        Ok(()) => final_directory(),
+        Err(error) => Err(error),
+    }
+}
+}
+
+#[cfg(not(verus_keep_ghost))]
 use crate::files::{file_identity, no_symlink_parents};
+#[cfg(not(verus_keep_ghost))]
 use crate::observed::CommandSpec;
+#[cfg(not(verus_keep_ghost))]
 use crate::{
     execution::Environment,
     recipe::{Loaded, Scope},
 };
+#[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
+#[cfg(not(verus_keep_ghost))]
 use std::{
     collections::BTreeMap,
     fs::{self, OpenOptions},
@@ -17,14 +44,17 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(not(verus_keep_ghost))]
 fn error(value: impl std::fmt::Display) -> String {
     format!("E_RELEASE_LOCAL: {value}")
 }
+#[cfg(not(verus_keep_ghost))]
 fn text(path: &Path) -> Result<String, String> {
     path.to_str()
         .map(str::to_owned)
         .ok_or_else(|| error("non UTF-8 local release path"))
 }
+#[cfg(not(verus_keep_ghost))]
 fn timestamp() -> Result<u128, String> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -32,6 +62,7 @@ fn timestamp() -> Result<u128, String> {
         .map_err(error)
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(error)?;
@@ -47,6 +78,7 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// 只运输本次实际产生的普通文件；复制原字节、权限并核对原始摘要。
+#[cfg(not(verus_keep_ghost))]
 fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
     let metadata = fs::symlink_metadata(source).map_err(error)?;
     if !metadata.is_dir() {
@@ -92,6 +124,7 @@ fn copy_tree(source: &Path, target: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(verus_keep_ghost))]
 struct Driver<'a> {
     root: PathBuf,
     output: PathBuf,
@@ -104,6 +137,7 @@ struct Driver<'a> {
     started: Instant,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl Driver<'_> {
     fn process(
         &self,
@@ -341,6 +375,20 @@ impl Driver<'_> {
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
+pub fn create_output(output: &Path) -> Result<(), String> {
+    let parent = output
+        .parent()
+        .ok_or_else(|| error("missing release output parent"))?;
+    claim_output(fs::create_dir_all(parent).map_err(error), || {
+        fs::create_dir(output).map_err(|failure| match failure.kind() {
+            std::io::ErrorKind::AlreadyExists => error("release output already exists"),
+            _ => error(failure),
+        })
+    })
+}
+
+#[cfg(not(verus_keep_ghost))]
 pub fn run(root: &Path, output: &Path, environment: Environment) -> Result<i32, String> {
     let root = fs::canonicalize(root).map_err(error)?;
     let loaded = Loaded::load(&root)?;
@@ -401,7 +449,7 @@ pub fn run(root: &Path, output: &Path, environment: Environment) -> Result<i32, 
     {
         return Err(error("local release requires a fixed clean candidate"));
     }
-    fs::create_dir_all(&output).map_err(error)?;
+    create_output(&output)?;
     let started_ns = timestamp()?;
     let driver = Driver {
         root,

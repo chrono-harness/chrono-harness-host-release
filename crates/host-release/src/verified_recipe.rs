@@ -29,6 +29,9 @@ pub mod files;
 #[path = "frontend.rs"]
 pub mod frontend;
 #[cfg(verus_keep_ghost)]
+#[path = "local.rs"]
+pub mod local;
+#[cfg(verus_keep_ghost)]
 #[path = "receipt.rs"]
 pub mod receipt;
 #[cfg(verus_keep_ghost)]

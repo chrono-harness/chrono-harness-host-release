@@ -665,3 +665,35 @@ fn incomplete_output_keeps_observed_bytes_and_prevents_a_successful_unit() {
     assert!(!child.passed());
     assert_eq!(child.exit_code(), 2);
 }
+
+#[cfg(not(verus_keep_ghost))]
+#[test]
+fn only_the_first_local_call_acquires_the_output_directory() {
+    use chrono_host_release::local::create_output;
+    let root = tempfile::tempdir().unwrap();
+    let output = root.path().join("new/parent/attempt");
+    let barrier = std::sync::Barrier::new(2);
+    let (first, second) = std::thread::scope(|threads| {
+        let contender = || {
+            barrier.wait();
+            create_output(&output)
+        };
+        let other = threads.spawn(contender);
+        (contender(), other.join().unwrap())
+    });
+    let loser = match (first, second) {
+        (Ok(()), Err(error)) | (Err(error), Ok(())) => error,
+        _ => panic!("exactly one local caller must acquire the output"),
+    };
+    assert_eq!(loser, "E_RELEASE_LOCAL: release output already exists");
+    let original = output.join("original");
+    fs::write(&original, b"release original").unwrap();
+    assert_eq!(create_output(&output).unwrap_err(), loser);
+    assert_eq!(fs::read(&original).unwrap(), b"release original");
+    let blocked = original.join("child/attempt");
+    let cause = fs::create_dir_all(blocked.parent().unwrap()).unwrap_err();
+    assert_eq!(
+        create_output(&blocked).unwrap_err(),
+        format!("E_RELEASE_LOCAL: {cause}")
+    );
+}
