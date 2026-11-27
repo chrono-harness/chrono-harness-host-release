@@ -14,6 +14,9 @@ pub mod codec;
 #[path = "main.rs"]
 pub mod command;
 #[cfg(verus_keep_ghost)]
+#[path = "committed.rs"]
+pub mod committed;
+#[cfg(verus_keep_ghost)]
 #[path = "evidence.rs"]
 pub mod evidence;
 #[cfg(verus_keep_ghost)]
@@ -37,6 +40,9 @@ pub mod registrations;
 #[cfg(verus_keep_ghost)]
 #[path = "staging.rs"]
 pub mod staging;
+#[cfg(verus_keep_ghost)]
+#[path = "transport.rs"]
+pub mod transport;
 #[cfg(not(verus_keep_ghost))]
 pub use crate::{execution, frontend, receipt, recipe, staging};
 

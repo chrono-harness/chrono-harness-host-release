@@ -1,6 +1,31 @@
 //! 发布单执行物的流式 tar。数据容量由文件系统承载，不经过 JSON 字节数组。
+#[cfg(not(verus_keep_ghost))]
+use verus_builtin_macros::verus;
+#[cfg(verus_keep_ghost)]
+use vstd::prelude::*;
+
+verus! {
+/// Inspect the next member once. A tar reader failure keeps its original value.
+pub fn archive_finished<T, E>(next: Option<Result<T, E>>) -> (end: Result<bool, E>)
+    ensures end == match next {
+        None => Ok(true),
+        Some(Ok(_)) => Ok(false),
+        Some(Err(failure)) => Err(failure),
+    },
+{
+    match next {
+        None => Ok(true),
+        Some(Ok(_)) => Ok(false),
+        Some(Err(failure)) => Err(failure),
+    }
+}
+}
+
+#[cfg(not(verus_keep_ghost))]
 use crate::verified_recipe as policy;
+#[cfg(not(verus_keep_ghost))]
 use serde_json::{Value, json};
+#[cfg(not(verus_keep_ghost))]
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
@@ -9,12 +34,14 @@ use std::{
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg(not(verus_keep_ghost))]
 pub struct ExecutableIdentity {
     pub sha256: String,
     pub size: u64,
     pub mode: u32,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl ExecutableIdentity {
     pub fn from_receipt(value: &Value) -> Result<Self, String> {
         let sha256 = value["sha256"]
@@ -42,27 +69,32 @@ impl ExecutableIdentity {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg(not(verus_keep_ghost))]
 pub struct ArchiveIdentity {
     pub sha256: String,
     pub size: u64,
 }
 
+#[cfg(not(verus_keep_ghost))]
 impl ArchiveIdentity {
     pub fn receipt(&self) -> Value {
         json!({"path": "executable.tar", "sha256": self.sha256, "size": self.size})
     }
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub struct PackedExecutable {
     pub executable: ExecutableIdentity,
     pub archive: ArchiveIdentity,
 }
 
+#[cfg(not(verus_keep_ghost))]
 fn error(message: impl std::fmt::Display) -> String {
     format!("E_RELEASE_TRANSPORT: {message}")
 }
 
 /// 调用方提供自己的源码／clone 根与登记路径；不扫描或推断资产。
+#[cfg(not(verus_keep_ghost))]
 pub fn observe(root: &Path, relative: &str) -> Result<ExecutableIdentity, String> {
     let path = crate::files::no_symlink_parents(root, relative)?;
     let metadata = fs::symlink_metadata(&path).map_err(error)?;
@@ -75,6 +107,7 @@ pub fn observe(root: &Path, relative: &str) -> Result<ExecutableIdentity, String
 }
 
 /// archive 可以位于源码根外，必须不存在。失败的部分原件由发布单元保管。
+#[cfg(not(verus_keep_ghost))]
 pub fn pack(root: &Path, relative: &str, archive: &Path) -> Result<PackedExecutable, String> {
     let executable = observe(root, relative)?;
     let source = crate::files::no_symlink_parents(root, relative)?;
@@ -119,6 +152,7 @@ pub fn pack(root: &Path, relative: &str, archive: &Path) -> Result<PackedExecuta
 
 /// 先核完整归档，再流式核单一文件，最后原子替换登记的消费路径。
 /// 原生 artifact/run/attempt 和 receipt 由上层在调用前核对。
+#[cfg(not(verus_keep_ghost))]
 fn read_archive(
     archive: &Path,
     expected_archive: &ArchiveIdentity,
@@ -157,10 +191,8 @@ fn read_archive(
     }
     let (sha256, size) = crate::files::copy_hashed(&mut entry, output)?;
     drop(entry);
-    match entries.next() {
-        Some(Err(failure)) => return Err(error(failure)),
-        Some(Ok(_)) => return Err(error("multiple executable archive entries")),
-        None => {}
+    if !archive_finished(entries.next()).map_err(error)? {
+        return Err(error("multiple executable archive entries"));
     }
     if !policy::same_executable(
         &sha256,
@@ -176,6 +208,7 @@ fn read_archive(
 }
 
 /// collector 只流式核归档内容，不暂存或执行工具。
+#[cfg(not(verus_keep_ghost))]
 pub fn validate(
     archive: &Path,
     expected_archive: &ArchiveIdentity,
@@ -184,6 +217,7 @@ pub fn validate(
     read_archive(archive, expected_archive, expected, &mut std::io::sink())
 }
 
+#[cfg(not(verus_keep_ghost))]
 pub fn import(
     archive: &Path,
     expected_archive: &ArchiveIdentity,

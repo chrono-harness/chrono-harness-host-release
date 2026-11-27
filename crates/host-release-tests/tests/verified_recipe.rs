@@ -46,6 +46,26 @@ mod staging_fixture;
 mod tool_fixture;
 
 verus! {
+#[cfg(verus_keep_ghost)]
+fn only_git_regular_files_are_admitted(line: &[u8]) {
+    let accepted = policy::committed::regular_blob_mode(line);
+    let plain = [b'1', b'0', b'0', b'6', b'4', b'4', b'\n'];
+    let executable = [b'1', b'0', b'0', b'7', b'5', b'5', b'\n'];
+    assert(plain@ =~= seq![49u8, 48, 48, 54, 52, 52, 10]);
+    assert(executable@ =~= seq![49u8, 48, 48, 55, 53, 53, 10]);
+    assert(accepted == (line@ == plain@ || line@ == executable@));
+}
+
+#[cfg(verus_keep_ghost)]
+fn archive_end_preserves_the_error_or_reports_the_member<T, E>(member: T, failure: E) {
+    let complete = policy::transport::archive_finished::<T, E>(None);
+    let extra = policy::transport::archive_finished::<T, E>(Some(Ok(member)));
+    let broken = policy::transport::archive_finished::<T, E>(Some(Err(failure)));
+    assert(complete == Ok(true));
+    assert(extra == Ok(false));
+    assert(broken == Err(failure));
+}
+
 
 #[cfg(verus_keep_ghost)]
 fn bootstrap_replies_keep_original_errors_and_only_decode_complete_output() {
