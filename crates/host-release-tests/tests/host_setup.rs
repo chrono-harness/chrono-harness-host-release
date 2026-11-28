@@ -38,7 +38,7 @@ mod native {
         // Copier v0.1.54 rendered with this host's template answers.
         assert_eq!(
             digest,
-            "666d65b9dff56772927ad3a073106ef4719e775b40e5fcdbb933b1ec6decdb64"
+            "7cfeb33cd88dfd737bf6c15bfb85cb85593ded2c55f2bf6ae7b10f55d03219b7"
         );
     }
 
