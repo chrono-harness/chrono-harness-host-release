@@ -237,6 +237,83 @@ fn roadmap_queries_use_github_objects_and_return_the_owned_issue_number() {
 }
 
 #[test]
+fn roadmap_reconciliation_returns_only_observable_changes() {
+    use chrono_host_release::verified_recipe::roadmap::run;
+    let query = |request: Value| -> Result<Value, String> {
+        let mut output = Vec::new();
+        run(
+            serde_json::to_vec(&request).unwrap().as_slice(),
+            &mut output,
+        )?;
+        Ok(serde_json::from_slice(&output).unwrap())
+    };
+    let mode = |plan: Value| query(json!({"operation":"rolling-plan","plan":plan}));
+    assert_eq!(mode(json!(null)).unwrap(), false);
+    assert_eq!(
+        mode(json!({"version":"0.1.2","version_policy":"something_else"})).unwrap(),
+        false
+    );
+    assert_eq!(
+        mode(json!({"version":"0.1.2","kind":"copier","version_policy":"next_patch"})).unwrap(),
+        true
+    );
+    assert!(
+        mode(json!({"version":"0.1.2","kind":"binary","version_policy":"next_patch"}))
+            .unwrap_err()
+            .contains("Copier")
+    );
+    for version in [
+        json!(3),
+        json!("01.2.3"),
+        json!("1.2"),
+        json!("1.2.3-alpha.1"),
+    ] {
+        assert!(
+            mode(json!({"version":version}))
+                .unwrap_err()
+                .contains("Expected version")
+        );
+    }
+    let selection = query(json!({"operation":"release-selection","reconcile":true,
+        "event_tag":"v2.0.0-rc.1","target":"v1.2.0","milestones":["Backlog","v01.0.0"],
+        "releases":[{"tag_name":"v2.0.0-rc.1","prerelease":true,"draft":false,"published_at":"1"},
+                    {"tag_name":"v01.0.0","draft":false,"published_at":"2"}]}))
+    .unwrap();
+    assert_eq!(
+        selection,
+        json!({"ensure":["v1.2.0","v2.0.0"],"refresh":{"v2.0.0":{"final":null,"preview":0}},"destination":"v1.2.0"})
+    );
+    for (event, titles) in [("wrong", json!(["v1.2.0"])), ("v1.2.0", json!(["v1.2.0"]))] {
+        let selection=query(json!({"operation":"release-selection","reconcile":true,"target":"v1.2.0","event_tag":event,"milestones":[],"releases":[]})).unwrap();
+        assert_eq!(selection["ensure"], titles);
+    }
+    let original = "<!-- chrono-harness release -->\npreview\n<!-- /chrono-harness release -->";
+    let update = |body, state| {
+        query(json!({"operation":"milestone-update","milestone":3,
+        "original":body,"lines":["preview"],"state":state,"final_release":true,"open_issues":0}))
+    };
+    assert_eq!(update(original, "closed").unwrap(), Value::Null);
+    assert_eq!(
+        update(original, "open").unwrap(),
+        json!({"description":original,"state":"closed"})
+    );
+    assert_eq!(
+        update("", "closed").unwrap(),
+        json!({"description":original,"state":"closed"})
+    );
+    assert!(update("<!-- chrono-harness release -->", "open").is_err());
+    for (body, expected) in [
+        ("first", "first\n\n恢复"),
+        ("first\n\n恢复", "first\n\n恢复"),
+    ] {
+        assert_eq!(
+            query(json!({"operation":"recovery-body","original":body,"recovery":"恢复"})).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
 fn roadmap_release_block_preserves_text_outside_the_first_pair() {
     use chrono_host_release::verified_recipe::roadmap::run;
     let begin = "<!-- chrono-harness release -->";

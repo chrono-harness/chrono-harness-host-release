@@ -56,6 +56,10 @@ Shell 安装器可直接运行 `chrono-host-release resolve-install-v1 --mise-to
 | --- | --- | --- |
 | `published` | `releases` 数组，每项含 `draft` 和 `published_at` | 已发布且有时间的条目的零基下标 |
 | `release-selection` | GitHub 顺序的 `releases`（`tag_name/draft/prerelease/published_at`）、可选 `event_tag` 与 `milestones` 标题列表 | 返回所选 `tag` 与各标题对应的 `final/preview` 原数组下标，缺项为 null。事件标签优先，最新公开发布及同前缀预览在时间并列时保留第一条，同名正式版保留最后一条。时间取 GitHub 的 UTC 发布时间；公开记录缺少时间时跳过。 |
+| `rolling-plan` | `plan` 取宿主计划原件或 null | 检查三个规范十进制分量，仅 Copier 的 next_patch 返回 true 并使用滚动版本。 |
+| `release-selection`（`reconcile: true`） | 同上，另传计划的 `target` 或 null | `ensure` 按计划、发行顺序列出需确保存在的标题，`refresh` 列出有公开发行的规范里程碑及其发行下标，`destination` 为未分配事项的目标。 |
+| `milestone-update` | `release-block` 输入加现有 `state`、`final_release` 和 `open_issues` | 正文或状态有变化时返回完整的 `{description,state}`，相同则返回 null。 |
+| `recovery-body` | `original` 正文和非空 `recovery` 恢复文字 | 原文中已有该文字时原样返回，否则在两个换行后追加。 |
 | `unassigned` | `issues` 数组，取 GitHub 的 `number/state/pull_request/milestone` | 可分配的 open issue 号码 |
 | `milestone` | `final_release` 布尔值、`open_issues` 非负整数 | `"closed"` 或 `"open"` |
 | `release-block` | `milestone` 编号、`original` 完整正文、`lines` 发行展示行数组 | 新的完整正文。替换首对发行标记之间的块；无标记时追加。缺一侧标记或首个结束标记在开始标记前时退出 2 |
