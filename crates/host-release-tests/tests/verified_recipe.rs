@@ -486,28 +486,30 @@ fn select_the_last_exact_job_in_provider_order() {
 fn consumer_obligations_stop_at_the_first_unsatisfied_declaration() {
     use delivery::{ConsumerAcceptance, JobEvidence, consumer_acceptance};
     proof {
-        reveal_strlit("a"); reveal_strlit("b"); reveal_strlit("z");
+        reveal_strlit("a"); reveal_strlit("bb"); reveal_strlit("zzz");
         reveal_strlit("exercise"); reveal_strlit("");
-        assert("a"@ != "b"@ && "b"@ != "z"@ && "a"@ != "z"@);
-        assert("exercise"@ != ""@);
+        assert("a"@.len() == 1 && "bb"@.len() == 2 && "zzz"@.len() == 3);
+        assert("exercise"@.len() != 0 && ""@.len() == 0);
+        reveal_strlit("sha"); reveal_strlit("different");
+        assert("sha"@.len() != "different"@.len());
     }
-    let names = [Some("a"), Some("b"), Some("a")];
+    let names = [Some("a"), Some("bb"), Some("a")];
     let evidence = |i:usize| -> (r: JobEvidence<'static>)
-        ensures r.name == (if i == 1 { Some("b") } else { Some("a") }),
+        ensures r.name == (if i == 1 { Some("bb") } else { Some("a") }),
             r.head == Some("sha"), r.conclusion == (if i == 0 { None } else { Some("success") }),
             r.steps@ == seq![(Some("exercise"),Some("success"))],
     {
-        JobEvidence { name: if i == 1 { Some("b") } else { Some("a") },
+        JobEvidence { name: if i == 1 { Some("bb") } else { Some("a") },
             head: Some("sha"), conclusion: if i == 0 { None } else { Some("success") },
             steps: vec![(Some("exercise"),Some("success"))] }
     };
-    expect_recipe(matches!(consumer_acceptance(&["a","b","a"], &names, "sha", "exercise", evidence),
+    expect_recipe(matches!(consumer_acceptance(&["a","bb","a"], &names, "sha", "exercise", evidence),
         ConsumerAcceptance::Accepted));
-    expect_recipe(matches!(consumer_acceptance(&["a","z","b"], &names, "sha", "exercise", evidence),
+    expect_recipe(matches!(consumer_acceptance(&["a","zzz","bb"], &names, "sha", "exercise", evidence),
         ConsumerAcceptance::Missing(1)));
-    expect_recipe(matches!(consumer_acceptance(&["a","z"], &names, "different", "exercise", evidence),
+    expect_recipe(matches!(consumer_acceptance(&["a","zzz"], &names, "different", "exercise", evidence),
         ConsumerAcceptance::Unexercised(0)));
-    expect_recipe(matches!(consumer_acceptance(&["z","a"], &names, "different", "exercise", evidence),
+    expect_recipe(matches!(consumer_acceptance(&["zzz","a"], &names, "different", "exercise", evidence),
         ConsumerAcceptance::Missing(0)));
     expect_recipe(matches!(consumer_acceptance(&[], &names, "sha", "exercise", evidence),
         ConsumerAcceptance::Undeclared));
