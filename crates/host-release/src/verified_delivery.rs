@@ -428,6 +428,29 @@ pub fn promotion_run(numbers: &[(Option<u64>, u64)], texts: &[(Option<&str>, &st
         && match head { Some(value) => valid_release_oid(value), None => false }
 }
 
+/// 结束早于开始时没有可报告的时间跨度。
+pub fn elapsed_ns(start: u64, finish: u64) -> (elapsed: Option<u64>)
+    ensures elapsed == if finish < start { None } else { Some((finish - start) as u64) },
+{
+    if finish < start { None } else { Some(finish - start) }
+}
+
+pub open spec fn within_limit(elapsed: Option<u64>, seconds: u64) -> bool {
+    match elapsed {
+        Some(ns) => ns as int <= seconds as int * 1000000000,
+        None => false,
+    }
+}
+
+pub fn span_within_limit(elapsed: Option<u64>, seconds: u64) -> (valid: bool)
+    ensures valid == within_limit(elapsed, seconds),
+{
+    match elapsed {
+        Some(ns) => ns as u128 <= seconds as u128 * 1000000000u128,
+        None => false,
+    }
+}
+
 /// 保留原生产时间窗；正式晋升不会重新计算或刷新原平台起点。
 pub fn original_spans(start: u64, finish: u64, platform: Option<u64>, span: Option<u64>, unit_seconds: u64, platform_seconds: u64) -> (valid: bool)
     ensures valid == (match platform {
@@ -439,10 +462,11 @@ pub fn original_spans(start: u64, finish: u64, platform: Option<u64>, span: Opti
     }),
 {
     match platform {
-        Some(p) => p > 0 && p <= start && start <= finish
-            && (finish - start) as u128 <= unit_seconds as u128 * 1000000000u128
-            && span == Some(finish - p)
-            && (finish - p) as u128 <= platform_seconds as u128 * 1000000000u128,
+        Some(p) => {
+            let platform_span = elapsed_ns(p, finish);
+            p > 0 && p <= start && span_within_limit(elapsed_ns(start, finish), unit_seconds)
+                && span == platform_span && span_within_limit(platform_span, platform_seconds)
+        },
         None => false,
     }
 }

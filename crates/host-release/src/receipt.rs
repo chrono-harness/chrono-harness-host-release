@@ -758,10 +758,10 @@ pub(crate) fn read_at(
     let finished = receipt["finished_ns"]
         .as_u64()
         .ok_or_else(|| error("missing original unit finish"))?;
-    if finished < started
-        || u128::from(finished - started)
-            > u128::from(loaded.recipe.limits.unit_seconds) * 1_000_000_000
-    {
+    if !policy::delivery::span_within_limit(
+        policy::delivery::elapsed_ns(started, finished),
+        loaded.recipe.limits.unit_seconds,
+    ) {
         return Err(error("original unit timing exceeds registered bound"));
     }
     for process in process_list(&receipt)? {

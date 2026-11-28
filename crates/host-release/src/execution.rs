@@ -4,12 +4,91 @@ use verus_builtin_macros::verus;
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 
+#[cfg(verus_keep_ghost)]
+use super::{
+    delivery::{elapsed_ns, span_within_limit},
+    result_exit,
+};
+#[cfg(not(verus_keep_ghost))]
+use crate::verified_recipe::{
+    delivery::{elapsed_ns, span_within_limit},
+    result_exit,
+};
+
 verus! {
 /// Selection and version receipts both use this order.
 pub fn compiler_names() -> (names: [&'static str; 2])
     ensures names[0]@ == "cargo"@, names[1]@ == "rustc"@,
 {
     ["cargo", "rustc"]
+}
+
+pub enum UnitFailure {
+    Child,
+    Operation,
+    Timestamp,
+    UnitSpan,
+    PlatformSpan,
+}
+
+pub struct UnitCompletion {
+    pub failure: Option<UnitFailure>,
+    pub platform_span: Option<u64>,
+}
+
+pub fn unit_completion(
+    child_failed: bool, operation_failed: bool, finished: Option<u64>,
+    started: u64, platform_started: Option<u64>, unit_seconds: u64, platform_seconds: u64,
+) -> (completion: UnitCompletion)
+    ensures
+        completion.platform_span == match (platform_started, finished) {
+            (Some(p), Some(f)) if p <= f => Some((f - p) as u64),
+            _ => None,
+        },
+        completion.failure == if child_failed { Some(UnitFailure::Child) }
+            else if operation_failed { Some(UnitFailure::Operation) }
+            else if finished is None { Some(UnitFailure::Timestamp) }
+            else if finished.unwrap() < started
+                || finished.unwrap() as int - started as int > unit_seconds as int * 1000000000
+                { Some(UnitFailure::UnitSpan) }
+            else if platform_started is Some && (finished.unwrap() < platform_started.unwrap()
+                || finished.unwrap() as int - platform_started.unwrap() as int
+                    > platform_seconds as int * 1000000000)
+                { Some(UnitFailure::PlatformSpan) }
+            else { None },
+{
+    let platform_span = match (platform_started, finished) {
+        (Some(p), Some(f)) => elapsed_ns(p, f),
+        _ => None,
+    };
+    let failure = if child_failed {
+        Some(UnitFailure::Child)
+    } else if operation_failed {
+        Some(UnitFailure::Operation)
+    } else if let Some(finished) = finished {
+        if !span_within_limit(elapsed_ns(started, finished), unit_seconds) {
+            Some(UnitFailure::UnitSpan)
+        } else if platform_started.is_some() && !span_within_limit(platform_span, platform_seconds) {
+            Some(UnitFailure::PlatformSpan)
+        } else {
+            None
+        }
+    } else {
+        Some(UnitFailure::Timestamp)
+    };
+    UnitCompletion { failure, platform_span }
+}
+
+/// A scope may complete successfully with no failing child.
+pub fn unit_exit(child: Option<i32>, failed: bool, receipt_written: bool) -> (code: i32)
+    requires child is Some ==> -127 <= child.unwrap() <= 255,
+    ensures code == match child {
+        Some(n) if n > 0 => n,
+        Some(n) if n < 0 => (128 - n) as i32,
+        _ => if failed || !receipt_written { 2i32 } else { 0i32 },
+    },
+{
+    result_exit(Some(child.unwrap_or(0)), failed || !receipt_written)
 }
 }
 #[cfg(not(verus_keep_ghost))]
@@ -613,51 +692,55 @@ impl<'a> Execution<'a> {
     }
 
     fn finish(mut self, outcome: Result<(), String>) -> i32 {
-        let mut failure = outcome.err();
-        let mut child = None;
-        if let Some((phase, code, original)) = self.child_failure.take() {
-            if let Some(extra) = failure.as_ref().filter(|extra| **extra != original) {
+        let operation_failure = outcome.err();
+        let child_failure = self.child_failure.take();
+        if let Some((_, _, original)) = &child_failure {
+            if let Some(extra) = operation_failure
+                .as_ref()
+                .filter(|extra| *extra != original)
+            {
                 self.secondary("post-child operation", extra);
             }
-            self.phase = phase;
-            failure = Some(original);
-            child = Some(code);
         }
-        let finished = match timestamp() {
-            Ok(value) => Some(value),
-            Err(error) => {
-                self.secondary("finish timestamp", &error);
-                failure.get_or_insert(error);
-                None
+        let timestamp = timestamp();
+        if let Err(diagnostic) = &timestamp {
+            self.secondary("finish timestamp", diagnostic);
+        }
+        let finished = timestamp.as_ref().ok().copied();
+        let started = self.report["started_ns"].as_u64().expect("producer start");
+        let platform_started = self.report["platform_started_ns"].as_u64();
+        let limits = &self.loaded.recipe.limits;
+        let completion = unit_completion(
+            child_failure.is_some(),
+            operation_failure.is_some(),
+            finished,
+            started,
+            platform_started,
+            limits.unit_seconds,
+            limits.platform_seconds,
+        );
+        if finished.is_some() && platform_started.is_some() {
+            self.report["platform_span_ns"] = json!(completion.platform_span);
+        }
+        let child = child_failure.as_ref().map(|(_, code, _)| *code);
+        let failure = match completion.failure {
+            Some(UnitFailure::Child) => {
+                let (phase, _, message) = child_failure.expect("observed failing child");
+                self.phase = phase;
+                Some(message)
             }
-        };
-        if let Some(finished) = finished {
-            let start = self.report["started_ns"].as_u64().expect("producer start");
-            if failure.is_none()
-                && (finished < start
-                    || u128::from(finished - start)
-                        > u128::from(self.loaded.recipe.limits.unit_seconds) * 1_000_000_000)
-            {
+            Some(UnitFailure::Operation) => operation_failure,
+            Some(UnitFailure::Timestamp) => timestamp.err(),
+            Some(UnitFailure::UnitSpan) => {
                 self.phase = "unit-span".into();
-                failure = Some(error("registered release unit span exceeded"));
+                Some(error("registered release unit span exceeded"))
             }
-            if let Some(started) = self
-                .report
-                .get("platform_started_ns")
-                .and_then(Value::as_u64)
-            {
-                self.report["platform_span_ns"] = json!(finished.checked_sub(started));
-                if failure.is_none()
-                    && (finished < started
-                        || u128::from(finished - started)
-                            > u128::from(self.loaded.recipe.limits.platform_seconds)
-                                * 1_000_000_000)
-                {
-                    self.phase = "platform-span".into();
-                    failure = Some(error("registered release platform span exceeded"));
-                }
+            Some(UnitFailure::PlatformSpan) => {
+                self.phase = "platform-span".into();
+                Some(error("registered release platform span exceeded"))
             }
-        }
+            None => None,
+        };
         self.report["finished_ns"] = json!(finished);
         self.report["status"] = json!(if failure.is_some() {
             "failed"
@@ -669,28 +752,15 @@ impl<'a> Execution<'a> {
                 json!({"phase":self.phase,"message":message,"exit_code":child});
             let _ = writeln!(std::io::stderr(), "{message}");
         }
-        let mut code = match child {
-            Some(code) if code > 0 => code,
-            Some(code) => 128 - code,
-            None => {
-                if failure.is_some() {
-                    2
-                } else {
-                    0
-                }
-            }
-        };
-        if let Err(failure) = write_json(&self.output.join("receipt.json"), &self.report) {
-            self.secondary("receipt publication", &failure);
+        let retained = write_json(&self.output.join("receipt.json"), &self.report);
+        if let Err(failure) = &retained {
+            self.secondary("receipt publication", failure);
             let _ = writeln!(
                 std::io::stderr(),
                 "cannot retain release unit evidence: {failure}"
             );
-            if code == 0 {
-                code = 2;
-            }
         }
-        code
+        unit_exit(child, failure.is_some(), retained.is_ok())
     }
 }
 
