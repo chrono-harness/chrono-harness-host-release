@@ -483,6 +483,65 @@ fn select_the_last_exact_job_in_provider_order() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn consumer_obligations_stop_at_the_first_unsatisfied_declaration() {
+    use delivery::{ConsumerAcceptance, JobEvidence, consumer_acceptance};
+    proof {
+        reveal_strlit("a"); reveal_strlit("bb"); reveal_strlit("zzz");
+        reveal_strlit("exercise"); reveal_strlit("");
+        assert("a"@.len() == 1 && "bb"@.len() == 2 && "zzz"@.len() == 3);
+        assert("exercise"@.len() != 0 && ""@.len() == 0);
+        reveal_strlit("sha"); reveal_strlit("different");
+        assert("sha"@.len() != "different"@.len());
+    }
+    let names = [Some("a"), Some("bb"), Some("a")];
+    let evidence = |i:usize| -> (r: JobEvidence<'static>)
+        ensures r.name == (if i == 1 { Some("bb") } else { Some("a") }),
+            r.head == Some("sha"), r.conclusion == (if i == 0 { None } else { Some("success") }),
+            r.steps.len() == 1, r.steps@[0] == (Some("exercise"),Some("success")),
+    {
+        let mut steps = Vec::new();
+        steps.push((Some("exercise"),Some("success")));
+        JobEvidence { name: if i == 1 { Some("bb") } else { Some("a") },
+            head: Some("sha"), conclusion: if i == 0 { None } else { Some("success") },
+            steps }
+    };
+    proof {
+        assert forall|j:usize, row:JobEvidence<'static>| j < 3 && #[trigger] evidence.ensures((j,), row) implies
+            row.passes("a", "sha", "exercise") == (j == 2)
+            && row.passes("bb", "sha", "exercise") == (j == 1)
+            && !row.passes("a", "different", "exercise") by {
+            assert(row.steps@[0].0 == Some("exercise") && row.steps@[0].1 == Some("success"));
+            assert(delivery::exercised_step(row.steps@, "exercise"));
+        }
+        assert forall|name:&str,sha:&str,passed:bool|
+            delivery::selected_outcome(names@, name, sha, "exercise", evidence, passed) implies
+            (name@ == "a"@ && (if sha@ == "sha"@ { passed } else { !passed }))
+            || (name@ == "bb"@ && (if sha@ == "sha"@ { passed } else { !passed })) by {
+            let (j,row) = choose|j:usize, row:JobEvidence<'static>| j < names.len()
+                && delivery::text_pair((names@[j as int],name))
+                && (forall|k:int| j < k < names.len() ==> !delivery::text_pair((#[trigger] names@[k],name)))
+                && #[trigger] evidence.ensures((j,),row) && row.passes(name,sha,"exercise")==passed;
+            assert(j == 0 || j == 1 || j == 2);
+            assert(names@[2] == Some("a"));
+            assert(row.steps@[0].0 == Some("exercise") && row.steps@[0].1 == Some("success"));
+            assert(delivery::exercised_step(row.steps@, "exercise"));
+        }
+    }
+    expect_recipe(matches!(consumer_acceptance(&["a","bb","a"], &names, "sha", "exercise", evidence),
+        ConsumerAcceptance::Accepted));
+    expect_recipe(matches!(consumer_acceptance(&["a","zzz","bb"], &names, "sha", "exercise", evidence),
+        ConsumerAcceptance::Missing(1)));
+    expect_recipe(matches!(consumer_acceptance(&["a","zzz"], &names, "different", "exercise", evidence),
+        ConsumerAcceptance::Unexercised(0)));
+    expect_recipe(matches!(consumer_acceptance(&["zzz","a"], &names, "different", "exercise", evidence),
+        ConsumerAcceptance::Missing(0)));
+    expect_recipe(matches!(consumer_acceptance(&[], &names, "sha", "exercise", evidence),
+        ConsumerAcceptance::Undeclared));
+    expect_recipe(matches!(consumer_acceptance(&["a"], &names, "sha", "", evidence),
+        ConsumerAcceptance::Undeclared));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn release_requires_a_named_successful_step_on_the_selected_job_and_commit() {
     proof { reveal_strlit("exercise"); reveal_strlit(""); assert("exercise"@.len() != 0); }
     expect_recipe(delivery::acceptance_declared(1, "exercise"));

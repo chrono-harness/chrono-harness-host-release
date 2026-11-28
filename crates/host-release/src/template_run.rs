@@ -19,7 +19,9 @@ pub fn landing_event(branch: &str, event: &str, run: u64, attempt: u64, upstream
 }
 
 #[cfg(not(verus_keep_ghost))]
-use crate::verified_recipe::delivery::{acceptance_declared, acceptance_job, landed_push};
+use crate::verified_recipe::delivery::{
+    ConsumerAcceptance, JobEvidence, acceptance_job, consumer_acceptance, landed_push,
+};
 #[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
 #[cfg(not(verus_keep_ghost))]
@@ -126,7 +128,7 @@ impl Landing {
                     (job["run_id"].as_u64(), self.id),
                     (job["run_attempt"].as_u64(), self.attempt),
                 ])
-                || !exercised_job(job, name, wrapper, step)
+                || !job_evidence(job).exercised(name, wrapper, step)
             {
                 return Err(format!(
                     "ambiguous or unsuccessful landing job {name} in selected attempt"
@@ -189,40 +191,38 @@ fn row_names(rows: &[Value]) -> Vec<Option<&str>> {
 }
 
 #[cfg(not(verus_keep_ghost))]
-fn exercised_job(job: &Value, name: &str, sha: &str, step: &str) -> bool {
+fn job_evidence(job: &Value) -> JobEvidence<'_> {
     let steps: Vec<_> = job["steps"]
         .as_array()
         .into_iter()
         .flatten()
         .map(|step| (step["name"].as_str(), step["conclusion"].as_str()))
         .collect();
-    acceptance_job(
-        job["name"].as_str(),
-        name,
-        job["conclusion"].as_str(),
-        job["head_sha"].as_str(),
-        sha,
-        &steps,
-        step,
-    )
+    JobEvidence {
+        name: job["name"].as_str(),
+        conclusion: job["conclusion"].as_str(),
+        head: job["head_sha"].as_str(),
+        steps,
+    }
 }
 
 #[cfg(not(verus_keep_ghost))]
 pub fn acceptance(input: impl Read) -> Result<(), String> {
     let request: Acceptance = read(input)?;
-    if !acceptance_declared(request.required_jobs.len(), &request.step) {
-        return Err("missing consumer acceptance obligations".into());
-    }
+    let required: Vec<_> = request.required_jobs.iter().map(String::as_str).collect();
     let names = row_names(&request.jobs);
-    for name in &request.required_jobs {
-        let index = crate::verified_recipe::delivery::last_job_named(&names, name)
-            .ok_or_else(|| format!("missing successful consumer on {name}"))?;
-        let job = &request.jobs[index];
-        if !exercised_job(job, name, &request.sha, &request.step) {
-            return Err(format!("missing exercised product on {name}"));
+    match consumer_acceptance(&required, &names, &request.sha, &request.step, |i| {
+        job_evidence(&request.jobs[i])
+    }) {
+        ConsumerAcceptance::Accepted => Ok(()),
+        ConsumerAcceptance::Undeclared => Err("missing consumer acceptance obligations".into()),
+        ConsumerAcceptance::Missing(i) => {
+            Err(format!("missing successful consumer on {}", required[i]))
+        }
+        ConsumerAcceptance::Unexercised(i) => {
+            Err(format!("missing exercised product on {}", required[i]))
         }
     }
-    Ok(())
 }
 
 #[cfg(not(verus_keep_ghost))]
