@@ -1,4 +1,4 @@
-//! Verify the setup command selected by this host’s installed mise config.
+//! Verify the setup command and installer selected by this host's mise config.
 #![allow(unexpected_cfgs)]
 use vstd::prelude::*;
 
@@ -18,11 +18,29 @@ pub fn mise_manifest() -> (s: &'static str) {
     include_str!("../../../.config/mise/conf.d/chrono-harness.toml")
 }
 
+pub fn tool_installer() -> &'static str {
+    include_str!("../../../.chrono-harness/install-tools.sh")
+}
+
 }
 
 #[cfg(all(test, not(verus_keep_ghost)))]
 mod native {
     use super::*;
+    use sha2::{Digest, Sha256};
+
+    #[test]
+    fn deployed_installer_matches_the_verified_copier_render() {
+        let digest: String = Sha256::digest(tool_installer().as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        // Copier v0.1.54 rendered with this host's template answers.
+        assert_eq!(
+            digest,
+            "39566b5b467e31e09edb73ffc0c79b6c719ef0f59b684df9c165bfb66048af47"
+        );
+    }
 
     fn setup_matches(source: &str, instructions: bool) -> bool {
         let Ok(doc) = source.parse::<toml::Table>() else {
