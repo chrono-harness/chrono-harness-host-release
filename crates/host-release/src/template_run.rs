@@ -20,7 +20,7 @@ pub fn landing_event(branch: &str, event: &str, run: u64, attempt: u64, upstream
 
 #[cfg(not(verus_keep_ghost))]
 use crate::verified_recipe::delivery::{
-    ConsumerAcceptance, JobEvidence, consumer_acceptance, landed_push,
+    ConsumerAcceptance, JobEvidence, acceptance_job, consumer_acceptance, landed_push,
 };
 #[cfg(not(verus_keep_ghost))]
 use serde::{Deserialize, Serialize};
