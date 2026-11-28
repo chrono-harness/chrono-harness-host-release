@@ -107,6 +107,90 @@ pub fn acceptance_declared(names: usize, step: &str) -> (valid: bool)
     ensures valid == (names > 0 && step@ != ""@),
 { names > 0 && !same_text(step, "") }
 
+/// Decode the selected provider row only after the last exact-name match.
+pub struct JobEvidence<'a> {
+    pub name: Option<&'a str>,
+    pub conclusion: Option<&'a str>,
+    pub head: Option<&'a str>,
+    pub steps: Vec<(Option<&'a str>, Option<&'a str>)>,
+}
+
+impl<'a> JobEvidence<'a> {
+    pub open spec fn passes(self, name: &str, sha: &str, step: &str) -> bool {
+        text_pair((self.name, name)) && text_pair((self.conclusion, "success"))
+            && text_pair((self.head, sha)) && exercised_step(self.steps@, step)
+    }
+
+    pub fn exercised(&self, name: &str, sha: &str, step: &str) -> (passed: bool)
+        ensures passed == self.passes(name, sha, step),
+    {
+        acceptance_job(self.name, name, self.conclusion, self.head, sha, self.steps.as_slice(), step)
+    }
+}
+
+pub enum ConsumerAcceptance {
+    Accepted,
+    Undeclared,
+    Missing(usize),
+    Unexercised(usize),
+}
+
+pub open spec fn selected_outcome<'a, F: Fn(usize) -> JobEvidence<'a>>(
+    names: Seq<Option<&str>>, name: &str, sha: &str, step: &str, decode: F, passed: bool,
+) -> bool {
+    exists|row:usize, evidence:JobEvidence<'a>| row < names.len()
+        && text_pair((names[row as int], name))
+        && (forall|j:int| row < j < names.len() ==> !text_pair((#[trigger] names[j], name)))
+        && #[trigger] decode.ensures((row,), evidence) && evidence.passes(name, sha, step) == passed
+}
+
+/// Accept all declared jobs or return the first failed obligation in declaration order.
+pub fn consumer_acceptance<'a, F: Fn(usize) -> JobEvidence<'a>>(
+    required: &[&str], names: &[Option<&str>], sha: &str, step: &str, decode: F,
+) -> (result: ConsumerAcceptance)
+    requires forall|row:usize| row < names.len() ==> decode.requires((row,)),
+    ensures
+        match result {
+            ConsumerAcceptance::Undeclared => required.len() == 0 || step@ == ""@,
+            ConsumerAcceptance::Accepted => required.len() > 0 && step@ != ""@
+                && forall|i:int| 0 <= i < required.len() ==>
+                    selected_outcome(names@, #[trigger] required@[i], sha, step, decode, true),
+            ConsumerAcceptance::Missing(i) | ConsumerAcceptance::Unexercised(i) =>
+                i < required.len() && step@ != ""@
+                    && (forall|k:int| 0 <= k < i ==>
+                        selected_outcome(names@, #[trigger] required@[k], sha, step, decode, true))
+                    && match result {
+                        ConsumerAcceptance::Missing(_) => forall|j:int| 0 <= j < names.len() ==>
+                            !text_pair((#[trigger] names@[j], required@[i as int])),
+                        _ => selected_outcome(names@, required@[i as int], sha, step, decode, false),
+                    },
+        },
+{
+    if !acceptance_declared(required.len(), step) { return ConsumerAcceptance::Undeclared; }
+    let mut i = 0;
+    while i < required.len()
+        invariant i <= required.len(), required.len() > 0, step@ != ""@,
+            forall|row:usize| row < names.len() ==> decode.requires((row,)),
+            forall|k:int| 0 <= k < i ==>
+                selected_outcome(names@, #[trigger] required@[k], sha, step, decode, true),
+        decreases required.len() - i,
+    {
+        let name = required[i];
+        let row = match last_job_named(names, name) {
+            None => return ConsumerAcceptance::Missing(i),
+            Some(row) => row,
+        };
+        let evidence = decode(row);
+        let passed = evidence.exercised(name, sha, step);
+        assert(selected_outcome(names@, name, sha, step, decode, passed)) by {
+            assert(decode.ensures((row,), evidence));
+        }
+        if !passed { return ConsumerAcceptance::Unexercised(i); }
+        i += 1;
+    }
+    ConsumerAcceptance::Accepted
+}
+
 pub fn number_fields(fields: &[(Option<u64>, u64)]) -> (valid: bool)
     ensures valid <==> forall|i: int| 0 <= i < fields.len() ==> fields@[i].0 == Some(fields@[i].1),
 {

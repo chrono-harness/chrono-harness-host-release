@@ -483,6 +483,39 @@ fn select_the_last_exact_job_in_provider_order() {
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn consumer_obligations_stop_at_the_first_unsatisfied_declaration() {
+    use delivery::{ConsumerAcceptance, JobEvidence, consumer_acceptance};
+    proof {
+        reveal_strlit("a"); reveal_strlit("b"); reveal_strlit("z");
+        reveal_strlit("exercise"); reveal_strlit("");
+        assert("a"@ != "b"@ && "b"@ != "z"@ && "a"@ != "z"@);
+        assert("exercise"@ != ""@);
+    }
+    let names = [Some("a"), Some("b"), Some("a")];
+    let evidence = |i:usize| -> (r: JobEvidence<'static>)
+        ensures r.name == (if i == 1 { Some("b") } else { Some("a") }),
+            r.head == Some("sha"), r.conclusion == (if i == 0 { None } else { Some("success") }),
+            r.steps@ == seq![(Some("exercise"),Some("success"))],
+    {
+        JobEvidence { name: if i == 1 { Some("b") } else { Some("a") },
+            head: Some("sha"), conclusion: if i == 0 { None } else { Some("success") },
+            steps: vec![(Some("exercise"),Some("success"))] }
+    };
+    expect_recipe(matches!(consumer_acceptance(&["a","b","a"], &names, "sha", "exercise", evidence),
+        ConsumerAcceptance::Accepted));
+    expect_recipe(matches!(consumer_acceptance(&["a","z","b"], &names, "sha", "exercise", evidence),
+        ConsumerAcceptance::Missing(1)));
+    expect_recipe(matches!(consumer_acceptance(&["a","z"], &names, "different", "exercise", evidence),
+        ConsumerAcceptance::Unexercised(0)));
+    expect_recipe(matches!(consumer_acceptance(&["z","a"], &names, "different", "exercise", evidence),
+        ConsumerAcceptance::Missing(0)));
+    expect_recipe(matches!(consumer_acceptance(&[], &names, "sha", "exercise", evidence),
+        ConsumerAcceptance::Undeclared));
+    expect_recipe(matches!(consumer_acceptance(&["a"], &names, "sha", "", evidence),
+        ConsumerAcceptance::Undeclared));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn release_requires_a_named_successful_step_on_the_selected_job_and_commit() {
     proof { reveal_strlit("exercise"); reveal_strlit(""); assert("exercise"@.len() != 0); }
     expect_recipe(delivery::acceptance_declared(1, "exercise"));
