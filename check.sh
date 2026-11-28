@@ -37,11 +37,9 @@ chrono-host-bootstrap check-compiler-sources native "$stem" \
   coverage_failure "native library differs from required sources"
 
 # The CLI root participates in the proof and is compiled as Cargo's binary target.
-executable=$(jq -ers --arg manifest "$(pwd -P)/$product" --arg source "$(pwd -P)/crates/host-release/src/main.rs" '
-  [.[] | select(.reason == "compiler-artifact" and .manifest_path == $manifest
-                 and .target.kind == ["bin"] and .target.src_path == $source) | .executable]
-  | if length == 1 and .[0] != null then .[0] else error("expected the release executable") end
-' "$scratch/build.jsonl") || coverage_failure "native release entry was not identified"
+executable=$(chrono-harness compiler-output-v1 select-cargo-bin \
+  "$(pwd -P)/$product" "$(pwd -P)/crates/host-release/src/main.rs" < "$scratch/build.jsonl") ||
+  coverage_failure "native release entry was not identified"
 test -x "$executable" || coverage_failure "native release executable is missing"
 
 src=crates/host-release/src
