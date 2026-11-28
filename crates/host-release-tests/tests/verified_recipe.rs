@@ -732,6 +732,50 @@ fn roadmap_uses_only_public_releases_unassigned_open_issues_and_completed_milest
 }
 
 #[cfg_attr(not(verus_keep_ghost), test)]
+fn roadmap_milestones_require_canonical_titles_and_a_public_release() {
+    use policy::roadmap::{managed_title, refresh_milestone, changed_milestone};
+    proof {
+        reveal_strlit("1"); reveal_strlit("0"); reveal_strlit("01");
+        reveal_strlit("open"); reveal_strlit("closed"); reveal_strlit("a"); reveal_strlit("b");
+        assert("open"@.len() != "closed"@.len());
+        assert("a"@[0] != "b"@[0]);
+    }
+    let good = ["1","0","1"];
+    let leading = ["1","01","1"];
+    expect_recipe(managed_title(true, &good));
+    expect_recipe(!managed_title(false, &good));
+    expect_recipe(!managed_title(true, &leading));
+    expect_recipe(!managed_title(true, &["1","0"]));
+    expect_recipe(refresh_milestone(true, None, Some(0)));
+    expect_recipe(refresh_milestone(true, Some(0), None));
+    expect_recipe(!refresh_milestone(true, None, None));
+    expect_recipe(!refresh_milestone(false, Some(0), Some(1)));
+    expect_recipe(!changed_milestone("a","a","open","open"));
+    expect_recipe(changed_milestone("a","b","open","open"));
+    expect_recipe(changed_milestone("a","a","open","closed"));
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
+fn issue_recovery_keeps_the_body_and_appends_a_missing_note_once() {
+    use policy::roadmap::recovery_body;
+    broadcast use vstd::array::group_array_axioms;
+    let body = [11u8,12];
+    let note = [12u8];
+    let other = [14u8];
+    proof {
+        assert(body@.subrange(1,2) =~= note@);
+        assert forall|i:int| !policy::roadmap::marker_at(body@,other@,i) by {
+            if 0 <= i < 2 { assert(body@.subrange(i,i+1)[0] == body@[i]); }
+        }
+    }
+    let kept = recovery_body(&body,&note);
+    let updated = recovery_body(&body,&other);
+    expect_recipe(kept.len() == 2 && kept[0] == 11 && kept[1] == 12);
+    expect_recipe(updated.len() == 5 && updated[0] == 11 && updated[1] == 12
+        && updated[2] == 10 && updated[3] == 10 && updated[4] == 14);
+}
+
+#[cfg_attr(not(verus_keep_ghost), test)]
 fn first_release_block_keeps_surrounding_bytes_and_rejects_a_reversed_pair() {
     use policy::roadmap::release_block;
     #[cfg(verus_keep_ghost)]

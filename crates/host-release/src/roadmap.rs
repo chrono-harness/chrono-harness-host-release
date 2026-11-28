@@ -7,6 +7,8 @@ use vstd::contrib::exec_spec::ExecSpecEq;
 #[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 use vstd::slice::slice_subrange;
+#[cfg(verus_keep_ghost)]
+use vstd::string::StringSliceAdditionalSpecFns;
 
 verus! {
 
@@ -140,6 +142,33 @@ pub fn issue_destination<'a>(target: Option<&'a str>, final_index: Option<usize>
     }
 }
 
+/// The adapter splits the optional leading v and the three decimal components.
+pub fn managed_title(prefixed: bool, parts: &[&str]) -> (valid: bool)
+    ensures valid == (prefixed && parts.len() == 3
+        && forall|i:int| 0 <= i < parts.len() ==> super::delivery::decimal(parts@[i].spec_bytes(), true)),
+{ prefixed && super::delivery::version_numbers(parts) }
+
+pub fn refresh_milestone(managed: bool, stable: Option<usize>, preview: Option<usize>) -> (refresh: bool)
+    ensures refresh == (managed && (stable.is_some() || preview.is_some())),
+{ managed && (stable.is_some() || preview.is_some()) }
+
+pub fn changed_milestone(original: &str, description: &str, current: &str, desired: &str) -> (update: bool)
+    ensures update == (original@ != description@ || current@ != desired@),
+{ !super::same_text(original, description) || !super::same_text(current, desired) }
+
+/// A release event may need the same title as the planned version.
+pub fn ensure_released<'a>(valid: bool, released: &'a str, planned: Option<&str>) -> (title: Option<&'a str>)
+    ensures title == (if valid && !(planned.is_some() && planned.unwrap()@ == released@) {
+        Some(released)
+    } else { None }),
+{
+    if !valid { return None; }
+    if let Some(target) = planned {
+        if super::same_text(released, target) { return None; }
+    }
+    Some(released)
+}
+
 pub fn milestone_state(final_release: bool, open_issues: u64) -> (state: &'static str)
     ensures state@ == (if final_release && open_issues == 0 { "closed"@ } else { "open"@ }),
 { if final_release && open_issues == 0 { "closed" } else { "open" } }
@@ -213,6 +242,22 @@ pub(crate) fn first_marker(text: &[u8], marker: &[u8]) -> (found: Option<usize>)
         index += 1;
     }
     None
+}
+
+/// Keep a recovery message already present anywhere in the original issue.
+pub fn recovery_body(original: &[u8], recovery: &[u8]) -> (body: Vec<u8>)
+    requires recovery.len() > 0,
+    ensures body@ == (if exists|i:int| marker_at(original@,recovery@,i) { original@ }
+        else { original@ + seq![10u8,10u8] + recovery@ }),
+{
+    let mut body = vstd::slice::slice_to_vec(original);
+    if first_marker(original, recovery).is_none() {
+        body.push(10u8);
+        body.push(10u8);
+        assert(body@ =~= original@ + seq![10u8,10u8]);
+        body.extend_from_slice(recovery);
+    }
+    body
 }
 
 /// Replace the first ordered pair. A lone or reversed first marker is invalid.
@@ -309,6 +354,9 @@ pub fn release_issue(
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 enum Query {
+    RollingPlan {
+        plan: Option<serde_json::Value>,
+    },
     Published {
         releases: Vec<Release>,
     },
@@ -317,6 +365,8 @@ enum Query {
         event_tag: Option<String>,
         target: Option<String>,
         milestones: Vec<String>,
+        #[serde(default)]
+        reconcile: bool,
     },
     Unassigned {
         issues: Vec<Issue>,
@@ -324,6 +374,18 @@ enum Query {
     Milestone {
         final_release: bool,
         open_issues: u64,
+    },
+    MilestoneUpdate {
+        milestone: u64,
+        original: String,
+        lines: Vec<String>,
+        state: String,
+        final_release: bool,
+        open_issues: u64,
+    },
+    RecoveryBody {
+        original: String,
+        recovery: String,
     },
     ReleaseBlock {
         milestone: u64,
@@ -386,10 +448,60 @@ struct Issue {
 }
 
 #[cfg(not(verus_keep_ghost))]
+fn release_description(milestone: u64, original: &str, lines: &[String]) -> Result<String, String> {
+    let begin = "<!-- chrono-harness release -->";
+    let end = "<!-- /chrono-harness release -->";
+    let block = std::iter::once(begin)
+        .chain(lines.iter().map(String::as_str))
+        .chain(std::iter::once(end))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let bytes = release_block(
+        original.as_bytes(),
+        begin.as_bytes(),
+        end.as_bytes(),
+        block.as_bytes(),
+    )
+    .ok_or_else(|| format!("Incomplete release block in milestone {milestone}"))?;
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
+#[cfg(not(verus_keep_ghost))]
+fn canonical_title(title: &str) -> bool {
+    let version = title.strip_prefix('v');
+    let parts: Vec<_> = version.unwrap_or("").split('.').collect();
+    managed_title(version.is_some(), &parts)
+}
+
+#[cfg(not(verus_keep_ghost))]
+fn rolling_plan(plan: Option<&serde_json::Value>) -> Result<bool, String> {
+    use super::delivery::{VersionPolicy, version_numbers, version_policy};
+    let Some(plan) = plan else {
+        return Ok(false);
+    };
+    let version = plan["version"].as_str().unwrap_or("");
+    let parts: Vec<_> = version.split('.').collect();
+    if !version_numbers(&parts) {
+        return Err("Expected version X.Y.Z in .chrono-harness/release.json".into());
+    }
+    let policy = plan.get("version_policy");
+    match version_policy(
+        plan["kind"].as_str(),
+        policy.is_some(),
+        policy.and_then(|v| v.as_str()),
+    ) {
+        VersionPolicy::NextPatch => Ok(true),
+        VersionPolicy::WrongProduct => Err("next_patch requires a Copier source product".into()),
+        VersionPolicy::Explicit | VersionPolicy::Unknown => Ok(false),
+    }
+}
+
+#[cfg(not(verus_keep_ghost))]
 pub fn run(input: impl std::io::Read, output: impl std::io::Write) -> Result<i32, String> {
     use serde_json::{json, to_writer};
     let query: Query = serde_json::from_reader(input).map_err(|e| e.to_string())?;
     let result = match query {
+        Query::RollingPlan { plan } => json!(rolling_plan(plan.as_ref())?),
         Query::Published { releases } => json!(
             releases
                 .iter()
@@ -404,6 +516,7 @@ pub fn run(input: impl std::io::Read, output: impl std::io::Write) -> Result<i32
             event_tag,
             target,
             milestones,
+            reconcile,
         } => {
             let rows: Vec<_> = releases
                 .iter()
@@ -434,7 +547,21 @@ pub fn run(input: impl std::io::Read, output: impl std::io::Write) -> Result<i32
             }
             let final_index = target.and_then(|planned| selected[planned].final_release);
             let destination = issue_destination(target, final_index);
-            json!({"tag":tag,"milestones":selected,"destination":destination})
+            if reconcile {
+                let released = released_milestone
+                    .and_then(|title| ensure_released(canonical_title(title), title, target));
+                let ensure: Vec<_> = target.into_iter().chain(released).collect();
+                selected.retain(|title, indices| {
+                    refresh_milestone(
+                        canonical_title(title),
+                        indices.final_release,
+                        indices.preview,
+                    )
+                });
+                json!({"ensure":ensure, "refresh":selected, "destination":destination})
+            } else {
+                json!({"tag":tag,"milestones":selected,"destination":destination})
+            }
         }
         Query::Unassigned { issues } => json!(
             issues
@@ -451,26 +578,35 @@ pub fn run(input: impl std::io::Read, output: impl std::io::Write) -> Result<i32
             final_release,
             open_issues,
         } => json!(milestone_state(final_release, open_issues)),
+        Query::MilestoneUpdate {
+            milestone,
+            original,
+            lines,
+            state,
+            final_release,
+            open_issues,
+        } => {
+            let description = release_description(milestone, &original, &lines)?;
+            let desired = milestone_state(final_release, open_issues);
+            if changed_milestone(&original, &description, &state, desired) {
+                json!({"description":description,"state":desired})
+            } else {
+                serde_json::Value::Null
+            }
+        }
+        Query::RecoveryBody { original, recovery } => {
+            if recovery.is_empty() {
+                return Err("expected a nonempty recovery message".into());
+            }
+            let body = recovery_body(original.as_bytes(), recovery.as_bytes());
+            json!(String::from_utf8(body).map_err(|e| e.to_string())?)
+        }
         Query::ReleaseBlock {
             milestone,
             original,
             lines,
         } => {
-            let begin = "<!-- chrono-harness release -->";
-            let end = "<!-- /chrono-harness release -->";
-            let block = std::iter::once(begin)
-                .chain(lines.iter().map(String::as_str))
-                .chain(std::iter::once(end))
-                .collect::<Vec<_>>()
-                .join("\n");
-            let bytes = release_block(
-                original.as_bytes(),
-                begin.as_bytes(),
-                end.as_bytes(),
-                block.as_bytes(),
-            )
-            .ok_or_else(|| format!("Incomplete release block in milestone {milestone}"))?;
-            json!(String::from_utf8(bytes).map_err(|e| e.to_string())?)
+            json!(release_description(milestone, &original, &lines)?)
         }
         Query::ReleaseRun { status, conclusion } => json!(!matches!(
             release_result(&status, conclusion.as_deref().unwrap_or("")),
