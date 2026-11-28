@@ -774,3 +774,7 @@ fn only_the_first_local_call_acquires_the_output_directory() {
         format!("E_RELEASE_LOCAL: {cause}")
     );
 }
+
+#[cfg(not(verus_keep_ghost))]
+#[path = "proof_support/host-release/support/execution.rs"]
+mod execution_fixture;

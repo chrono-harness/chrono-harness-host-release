@@ -33,6 +33,8 @@ mod recipe;
 #[path = "proof_support/host-release/support/execution.rs"]
 mod execution_fixture;
 
+use execution_fixture::expect_recipe;
+
 #[cfg(verus_keep_ghost)]
 #[path = "proof_support/host-release/support/frontend.rs"]
 mod frontend_fixture;
@@ -859,13 +861,6 @@ fn roadmap_updates_only_its_own_original_issue_across_release_attempts() {
     expect_recipe(matches!(duplicate,IssueAction::None));
 }
 
-fn expect_recipe(actual: bool)
-    requires actual,
-{
-    if !actual {
-        panic!();
-    }
-}
 
 #[cfg_attr(not(verus_keep_ghost), test)]
 fn release_fixture_cleanup_preserves_the_original_failure() {
