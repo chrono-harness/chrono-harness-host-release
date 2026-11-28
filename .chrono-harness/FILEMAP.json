@@ -123,7 +123,16 @@
           "kind": "test-execution",
           "to": "test:host-release-tests"
         }
-      ]
+      ],
+      "verification": {
+        "role": "program",
+        "roots": [
+          {
+            "path": "crates/host-release-tests/tests/host_setup.rs",
+            "operation": "verify.host-setup"
+          }
+        ]
+      }
     },
     {
       "path": ".chrono-harness/judges.json",
